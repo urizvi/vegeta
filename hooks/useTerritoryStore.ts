@@ -36,25 +36,6 @@ export const useEntityAssignedTeam = (entityCode: string) =>
     return s.teams[a.teamId] ?? null;
   });
 
-// Actions (stable references — won't cause re-renders)
-export const useActions = () =>
-  useStore((s) => ({
-    addTeam: s.addTeam,
-    updateTeam: s.updateTeam,
-    removeTeam: s.removeTeam,
-    addMember: s.addMember,
-    updateMember: s.updateMember,
-    removeMember: s.removeMember,
-    addRegion: s.addRegion,
-    removeRegion: s.removeRegion,
-    assignRegionToTeam: s.assignRegionToTeam,
-    setAssignment: s.setAssignment,
-    clearAssignment: s.clearAssignment,
-    bulkAssign: s.bulkAssign,
-    setActiveView: s.setActiveView,
-    setDrillDownCountryCode: s.setDrillDownCountryCode,
-    setSelectedEntityCode: s.setSelectedEntityCode,
-    setHoveredEntityCode: s.setHoveredEntityCode,
-    exportState: s.exportState,
-    importState: s.importState,
-  }));
+// Actions are stable references in Zustand — read directly from getState()
+// so no subscription or snapshot comparison is needed.
+export const useActions = () => useStore.getState();
