@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import TerritoryApp from '@/components/territory/TerritoryApp';
+import TerritoryClient from './TerritoryClient';
 
 export const metadata: Metadata = {
   title: 'Sales Deployment',
@@ -7,5 +7,5 @@ export const metadata: Metadata = {
 };
 
 export default function TerritoryPage() {
-  return <TerritoryApp />;
+  return <TerritoryClient />;
 }
