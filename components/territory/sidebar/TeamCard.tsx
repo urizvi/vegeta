@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { useActions, useTerritoryStore } from '@/hooks/useTerritoryStore';
 import type { SalesTeam } from '@/types/territory';
 import MemberRow from './MemberRow';
@@ -13,8 +14,8 @@ export default function TeamCard({ team }: { team: SalesTeam }) {
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState(team.name);
   const { updateTeam, removeTeam } = useActions();
-  const members = useTerritoryStore((s) =>
-    team.memberIds.map((id) => s.members[id]).filter(Boolean),
+  const members = useTerritoryStore(
+    useShallow((s) => team.memberIds.map((id) => s.members[id]).filter(Boolean)),
   );
   const contrastColor = getContrastText(team.color);
 
