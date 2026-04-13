@@ -93,7 +93,7 @@ export default function SpreadsheetView() {
             ) : (
               countryRows.map((c) => (
                 <SpreadsheetRow
-                  key={c.id}
+                  key={c.rsmKey}
                   entityCode={c.iso2 || c.id}
                   entityName={c.name}
                   entityType="country"
