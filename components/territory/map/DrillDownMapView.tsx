@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useCallback } from 'react';
-import { ComposableMap, ZoomableGroup, Geographies, Geography, Sphere, Graticule } from 'react-simple-maps';
+import { useState, useCallback, memo } from 'react';
+import { ComposableMap, ZoomableGroup, Geography, Sphere, Graticule } from 'react-simple-maps';
 import { useCountryStates } from '@/hooks/useCountryStates';
 import type { StateFeature } from '@/hooks/useCountryStates';
 import { useCountryFillColor, useActions } from '@/hooks/useTerritoryStore';
@@ -20,8 +20,7 @@ interface PopoverState {
   position: { x: number; y: number };
 }
 
-// Single state geography — memoized per feature
-function StateGeo({
+const StateGeo = memo(function StateGeo({
   geo,
   onClickState,
 }: {
@@ -40,7 +39,7 @@ function StateGeo({
       strokeWidth={0.8}
       style={{
         default: { outline: 'none', cursor: 'pointer', transition: 'fill 150ms ease' },
-        hover: { outline: 'none', fill: fill === '#d1d5db' ? '#b0b7c0' : fill, opacity: 0.82 },
+        hover:   { outline: 'none', fill: fill === '#d1d5db' ? '#b0b7c0' : fill, opacity: 0.82 },
         pressed: { outline: 'none' },
       }}
       onMouseEnter={() => setHoveredEntityCode(`${geo.name} (${geo.id})`)}
@@ -51,13 +50,13 @@ function StateGeo({
       tabIndex={0}
       onKeyDown={(e: React.KeyboardEvent<SVGPathElement>) => {
         if (e.key === 'Enter' || e.key === ' ') {
-          const rect = e.currentTarget.getBoundingClientRect();
-          onClickState(geo, rect.left + rect.width / 2, rect.top + rect.height / 2);
+          const r = e.currentTarget.getBoundingClientRect();
+          onClickState(geo, r.left + r.width / 2, r.top + r.height / 2);
         }
       }}
     />
   );
-}
+});
 
 export default function DrillDownMapView({ countryIso2, countryName }: DrillDownMapViewProps) {
   const { features, loading, error } = useCountryStates(countryIso2);
@@ -70,8 +69,7 @@ export default function DrillDownMapView({ countryIso2, countryName }: DrillDown
   }, []);
 
   const handleClickState = useCallback((geo: StateFeature, x: number, y: number) => {
-    const entityCode = `${geo.iso2}:${geo.id}`;
-    setPopover({ entityCode, entityName: geo.name, position: { x, y } });
+    setPopover({ entityCode: `${geo.iso2}:${geo.id}`, entityName: geo.name, position: { x, y } });
   }, []);
 
   if (loading) {
@@ -113,17 +111,9 @@ export default function DrillDownMapView({ countryIso2, countryName }: DrillDown
         <ZoomableGroup zoom={zoom} minZoom={0.5} maxZoom={12}>
           <Sphere fill="#cde8f5" stroke="#b0cdd8" strokeWidth={0.5} />
           <Graticule stroke="#d5e8ef" strokeWidth={0.3} step={[20, 20]} />
-          <Geographies geography={{ type: 'FeatureCollection', features }}>
-            {({ geographies }) =>
-              geographies.map((geo) => {
-                const feat = features.find((f) => f.rsmKey === geo.rsmKey);
-                if (!feat) return null;
-                return (
-                  <StateGeo key={geo.rsmKey} geo={feat} onClickState={handleClickState} />
-                );
-              })
-            }
-          </Geographies>
+          {features.map((feat) => (
+            <StateGeo key={feat.rsmKey} geo={feat} onClickState={handleClickState} />
+          ))}
         </ZoomableGroup>
       </ComposableMap>
 

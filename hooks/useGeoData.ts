@@ -3,14 +3,15 @@ import { feature } from 'topojson-client';
 import type { Topology, GeometryCollection } from 'topojson-specification';
 import { numericToIso2 } from '@/lib/geoUtils';
 
-// Loaded once at module level — synchronous, no loading state needed
+// Static import — bundled once, synchronous, no loading state needed
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const worldTopo = require('world-atlas/countries-110m.json') as Topology;
+import worldTopoRaw from 'world-atlas/countries-110m.json';
+const worldTopo = worldTopoRaw as unknown as Topology;
 
 export interface CountryFeature {
   rsmKey: string;
-  id: string; // numeric ISO code
-  iso2: string; // alpha-2 ISO code
+  id: string;    // numeric ISO code
+  iso2: string;  // alpha-2 ISO code
   name: string;
   geometry: unknown;
   properties: Record<string, unknown>;

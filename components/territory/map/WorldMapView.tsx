@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useCallback } from 'react';
-import { ComposableMap, ZoomableGroup, Geographies, Geography, Sphere, Graticule } from 'react-simple-maps';
+import { useState, useCallback, memo } from 'react';
+import { ComposableMap, ZoomableGroup, Geography, Sphere, Graticule } from 'react-simple-maps';
 import { useGeoData } from '@/hooks/useGeoData';
 import type { CountryFeature } from '@/hooks/useGeoData';
 import { useCountryFillColor, useActions } from '@/hooks/useTerritoryStore';
@@ -19,7 +19,8 @@ interface PopoverState {
   position: { x: number; y: number };
 }
 
-function CountryGeo({
+// Render one country — memoised so it only re-renders when its fill color changes
+const CountryGeo = memo(function CountryGeo({
   geo,
   onClickCountry,
 }: {
@@ -38,7 +39,7 @@ function CountryGeo({
       strokeWidth={0.4}
       style={{
         default: { outline: 'none', cursor: 'pointer', transition: 'fill 150ms ease' },
-        hover: { outline: 'none', fill: fill === '#d1d5db' ? '#b0b7c0' : fill, opacity: 0.82 },
+        hover:   { outline: 'none', fill: fill === '#d1d5db' ? '#b0b7c0' : fill, opacity: 0.82 },
         pressed: { outline: 'none' },
       }}
       onMouseEnter={() => setHoveredEntityCode(geo.name)}
@@ -49,13 +50,13 @@ function CountryGeo({
       tabIndex={0}
       onKeyDown={(e: React.KeyboardEvent<SVGPathElement>) => {
         if (e.key === 'Enter' || e.key === ' ') {
-          const rect = e.currentTarget.getBoundingClientRect();
-          onClickCountry(geo, rect.left + rect.width / 2, rect.top + rect.height / 2);
+          const r = e.currentTarget.getBoundingClientRect();
+          onClickCountry(geo, r.left + r.width / 2, r.top + r.height / 2);
         }
       }}
     />
   );
-}
+});
 
 export default function WorldMapView({ onDrillDown }: WorldMapViewProps) {
   const countries = useGeoData();
@@ -68,13 +69,10 @@ export default function WorldMapView({ onDrillDown }: WorldMapViewProps) {
     setMousePos({ x: e.clientX, y: e.clientY });
   }, []);
 
-  const handleClickCountry = useCallback(
-    (geo: CountryFeature, x: number, y: number) => {
-      const entityCode = geo.iso2 || geo.id;
-      setPopover({ entityCode, entityName: geo.name, position: { x, y } });
-    },
-    [],
-  );
+  const handleClickCountry = useCallback((geo: CountryFeature, x: number, y: number) => {
+    const entityCode = geo.iso2 || geo.id;
+    setPopover({ entityCode, entityName: geo.name, position: { x, y } });
+  }, []);
 
   return (
     <div className="relative flex-1 bg-[#e8f4f8]" onMouseMove={handleMouseMove}>
@@ -95,21 +93,13 @@ export default function WorldMapView({ onDrillDown }: WorldMapViewProps) {
         >
           <Sphere fill="#cde8f5" stroke="#b0cdd8" strokeWidth={0.5} />
           <Graticule stroke="#d5e8ef" strokeWidth={0.3} step={[20, 20]} />
-          <Geographies geography={{ type: 'FeatureCollection', features: countries }}>
-            {({ geographies }) =>
-              geographies.map((geo) => {
-                const country = countries.find((c) => c.rsmKey === geo.rsmKey);
-                if (!country) return null;
-                return (
-                  <CountryGeo
-                    key={geo.rsmKey}
-                    geo={country}
-                    onClickCountry={handleClickCountry}
-                  />
-                );
-              })
-            }
-          </Geographies>
+          {countries.map((country) => (
+            <CountryGeo
+              key={country.rsmKey}
+              geo={country}
+              onClickCountry={handleClickCountry}
+            />
+          ))}
         </ZoomableGroup>
       </ComposableMap>
 
@@ -144,10 +134,7 @@ export default function WorldMapView({ onDrillDown }: WorldMapViewProps) {
           onClose={() => setPopover(null)}
           onDrillDown={
             popover.entityCode
-              ? () => {
-                  onDrillDown(popover.entityCode, popover.entityName);
-                  setPopover(null);
-                }
+              ? () => { onDrillDown(popover.entityCode, popover.entityName); setPopover(null); }
               : undefined
           }
         />
