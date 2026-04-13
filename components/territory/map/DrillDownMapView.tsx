@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useCallback, memo } from 'react';
-import { ComposableMap, ZoomableGroup, Geography, Sphere, Graticule } from 'react-simple-maps';
+import { useState, useCallback, useMemo, memo } from 'react';
+import { ComposableMap, ZoomableGroup, Geographies, Geography, Sphere, Graticule } from 'react-simple-maps';
 import { useCountryStates } from '@/hooks/useCountryStates';
 import type { StateFeature } from '@/hooks/useCountryStates';
 import { useCountryFillColor, useActions } from '@/hooks/useTerritoryStore';
@@ -20,12 +20,21 @@ interface PopoverState {
   position: { x: number; y: number };
 }
 
+interface EnrichedStateGeo {
+  rsmKey: string;
+  svgPath: string;
+  iso2: string;
+  id: string;
+  name: string;
+  [key: string]: unknown;
+}
+
 const StateGeo = memo(function StateGeo({
   geo,
   onClickState,
 }: {
-  geo: StateFeature;
-  onClickState: (geo: StateFeature, x: number, y: number) => void;
+  geo: EnrichedStateGeo;
+  onClickState: (entityCode: string, name: string, x: number, y: number) => void;
 }) {
   const entityCode = `${geo.iso2}:${geo.id}`;
   const fill = useCountryFillColor(entityCode);
@@ -44,14 +53,14 @@ const StateGeo = memo(function StateGeo({
       }}
       onMouseEnter={() => setHoveredEntityCode(`${geo.name} (${geo.id})`)}
       onMouseLeave={() => setHoveredEntityCode(null)}
-      onClick={(e: React.MouseEvent) => onClickState(geo, e.clientX, e.clientY)}
+      onClick={(e: React.MouseEvent) => onClickState(entityCode, geo.name, e.clientX, e.clientY)}
       role="button"
       aria-label={geo.name}
       tabIndex={0}
       onKeyDown={(e: React.KeyboardEvent<SVGPathElement>) => {
         if (e.key === 'Enter' || e.key === ' ') {
           const r = e.currentTarget.getBoundingClientRect();
-          onClickState(geo, r.left + r.width / 2, r.top + r.height / 2);
+          onClickState(entityCode, geo.name, r.left + r.width / 2, r.top + r.height / 2);
         }
       }}
     />
@@ -64,13 +73,22 @@ export default function DrillDownMapView({ countryIso2, countryName }: DrillDown
   const [popover, setPopover] = useState<PopoverState | null>(null);
   const [zoom, setZoom] = useState(1);
 
+  // Stable reference for Geographies
+  const featureCollection = useMemo(
+    () => ({ type: 'FeatureCollection' as const, features }),
+    [features],
+  );
+
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     setMousePos({ x: e.clientX, y: e.clientY });
   }, []);
 
-  const handleClickState = useCallback((geo: StateFeature, x: number, y: number) => {
-    setPopover({ entityCode: `${geo.iso2}:${geo.id}`, entityName: geo.name, position: { x, y } });
-  }, []);
+  const handleClickState = useCallback(
+    (entityCode: string, name: string, x: number, y: number) => {
+      setPopover({ entityCode, entityName: name, position: { x, y } });
+    },
+    [],
+  );
 
   if (loading) {
     return (
@@ -113,29 +131,31 @@ export default function DrillDownMapView({ countryIso2, countryName }: DrillDown
         <ZoomableGroup zoom={zoom} minZoom={0.5} maxZoom={12}>
           <Sphere fill="#cde8f5" stroke="#b0cdd8" strokeWidth={0.5} />
           <Graticule stroke="#d5e8ef" strokeWidth={0.3} step={[20, 20]} />
-          {features.map((feat) => (
-            <StateGeo key={feat.rsmKey} geo={feat} onClickState={handleClickState} />
-          ))}
+          <Geographies geography={featureCollection}>
+            {({ geographies }) =>
+              geographies.map((geo) => (
+                <StateGeo
+                  key={geo.rsmKey}
+                  geo={geo as unknown as EnrichedStateGeo}
+                  onClickState={handleClickState}
+                />
+              ))
+            }
+          </Geographies>
         </ZoomableGroup>
       </ComposableMap>
 
       {/* Zoom controls */}
       <div className="absolute right-4 top-4 flex flex-col gap-1">
-        <button
-          onClick={() => setZoom((z) => Math.min(z * 1.5, 12))}
+        <button onClick={() => setZoom((z) => Math.min(z * 1.5, 12))}
           className="flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-200 bg-white text-sm font-bold shadow hover:bg-zinc-50"
-          aria-label="Zoom in"
-        >+</button>
-        <button
-          onClick={() => setZoom((z) => Math.max(z / 1.5, 0.5))}
+          aria-label="Zoom in">+</button>
+        <button onClick={() => setZoom((z) => Math.max(z / 1.5, 0.5))}
           className="flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-200 bg-white text-sm font-bold shadow hover:bg-zinc-50"
-          aria-label="Zoom out"
-        >−</button>
-        <button
-          onClick={() => setZoom(1)}
+          aria-label="Zoom out">−</button>
+        <button onClick={() => setZoom(1)}
           className="flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-200 bg-white text-xs shadow hover:bg-zinc-50"
-          aria-label="Reset zoom"
-        >⊙</button>
+          aria-label="Reset zoom">⊙</button>
       </div>
 
       <MapLegend />

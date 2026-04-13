@@ -1,9 +1,8 @@
 'use client';
 
-import { useState, useCallback, memo } from 'react';
-import { ComposableMap, ZoomableGroup, Geography, Sphere, Graticule } from 'react-simple-maps';
+import { useState, useCallback, useMemo, memo } from 'react';
+import { ComposableMap, ZoomableGroup, Geographies, Geography, Sphere, Graticule } from 'react-simple-maps';
 import { useGeoData } from '@/hooks/useGeoData';
-import type { CountryFeature } from '@/hooks/useGeoData';
 import { useCountryFillColor, useActions } from '@/hooks/useTerritoryStore';
 import MapLegend from './MapLegend';
 import MapTooltip from './MapTooltip';
@@ -19,13 +18,22 @@ interface PopoverState {
   position: { x: number; y: number };
 }
 
-// Render one country — memoised so it only re-renders when its fill color changes
+// geo from Geographies has svgPath set + all CountryFeature fields spread onto it
+interface EnrichedGeo {
+  rsmKey: string;
+  svgPath: string;
+  iso2: string;
+  id: string;
+  name: string;
+  [key: string]: unknown;
+}
+
 const CountryGeo = memo(function CountryGeo({
   geo,
   onClickCountry,
 }: {
-  geo: CountryFeature;
-  onClickCountry: (geo: CountryFeature, x: number, y: number) => void;
+  geo: EnrichedGeo;
+  onClickCountry: (entityCode: string, name: string, x: number, y: number) => void;
 }) {
   const entityCode = geo.iso2 || geo.id;
   const fill = useCountryFillColor(entityCode);
@@ -44,14 +52,14 @@ const CountryGeo = memo(function CountryGeo({
       }}
       onMouseEnter={() => setHoveredEntityCode(geo.name)}
       onMouseLeave={() => setHoveredEntityCode(null)}
-      onClick={(e: React.MouseEvent) => onClickCountry(geo, e.clientX, e.clientY)}
+      onClick={(e: React.MouseEvent) => onClickCountry(entityCode, geo.name, e.clientX, e.clientY)}
       role="button"
       aria-label={geo.name}
       tabIndex={0}
       onKeyDown={(e: React.KeyboardEvent<SVGPathElement>) => {
         if (e.key === 'Enter' || e.key === ' ') {
           const r = e.currentTarget.getBoundingClientRect();
-          onClickCountry(geo, r.left + r.width / 2, r.top + r.height / 2);
+          onClickCountry(entityCode, geo.name, r.left + r.width / 2, r.top + r.height / 2);
         }
       }}
     />
@@ -65,14 +73,22 @@ export default function WorldMapView({ onDrillDown }: WorldMapViewProps) {
   const [zoom, setZoom] = useState(1);
   const [center, setCenter] = useState<[number, number]>([0, 20]);
 
+  // Stable reference — Geographies re-runs its effect whenever this changes
+  const featureCollection = useMemo(
+    () => ({ type: 'FeatureCollection' as const, features: countries }),
+    [countries],
+  );
+
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     setMousePos({ x: e.clientX, y: e.clientY });
   }, []);
 
-  const handleClickCountry = useCallback((geo: CountryFeature, x: number, y: number) => {
-    const entityCode = geo.iso2 || geo.id;
-    setPopover({ entityCode, entityName: geo.name, position: { x, y } });
-  }, []);
+  const handleClickCountry = useCallback(
+    (entityCode: string, name: string, x: number, y: number) => {
+      setPopover({ entityCode, entityName: name, position: { x, y } });
+    },
+    [],
+  );
 
   return (
     <div className="absolute inset-0 bg-[#e8f4f8]" onMouseMove={handleMouseMove}>
@@ -95,13 +111,17 @@ export default function WorldMapView({ onDrillDown }: WorldMapViewProps) {
         >
           <Sphere fill="#cde8f5" stroke="#b0cdd8" strokeWidth={0.5} />
           <Graticule stroke="#d5e8ef" strokeWidth={0.3} step={[20, 20]} />
-          {countries.map((country) => (
-            <CountryGeo
-              key={country.rsmKey}
-              geo={country}
-              onClickCountry={handleClickCountry}
-            />
-          ))}
+          <Geographies geography={featureCollection}>
+            {({ geographies }) =>
+              geographies.map((geo) => (
+                <CountryGeo
+                  key={geo.rsmKey}
+                  geo={geo as unknown as EnrichedGeo}
+                  onClickCountry={handleClickCountry}
+                />
+              ))
+            }
+          </Geographies>
         </ZoomableGroup>
       </ComposableMap>
 
