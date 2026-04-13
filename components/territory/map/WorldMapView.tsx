@@ -75,10 +75,12 @@ export default function WorldMapView({ onDrillDown }: WorldMapViewProps) {
   }, []);
 
   return (
-    <div className="relative flex-1 bg-[#e8f4f8]" onMouseMove={handleMouseMove}>
+    <div className="absolute inset-0 bg-[#e8f4f8]" onMouseMove={handleMouseMove}>
       <ComposableMap
         projection="geoMercator"
         projectionConfig={{ scale: 140 }}
+        width={980}
+        height={551}
         style={{ width: '100%', height: '100%' }}
       >
         <ZoomableGroup

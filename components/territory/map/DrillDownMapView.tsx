@@ -74,7 +74,7 @@ export default function DrillDownMapView({ countryIso2, countryName }: DrillDown
 
   if (loading) {
     return (
-      <div className="flex flex-1 items-center justify-center bg-[#e8f4f8]">
+      <div className="absolute inset-0 flex items-center justify-center bg-[#e8f4f8]">
         <div className="flex items-center gap-2 text-zinc-500">
           <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -88,7 +88,7 @@ export default function DrillDownMapView({ countryIso2, countryName }: DrillDown
 
   if (error) {
     return (
-      <div className="flex flex-1 items-center justify-center bg-[#e8f4f8]">
+      <div className="absolute inset-0 flex items-center justify-center bg-[#e8f4f8]">
         <div className="text-red-500">Failed to load states: {error}</div>
       </div>
     );
@@ -96,16 +96,18 @@ export default function DrillDownMapView({ countryIso2, countryName }: DrillDown
 
   if (features.length === 0) {
     return (
-      <div className="flex flex-1 items-center justify-center bg-[#e8f4f8]">
+      <div className="absolute inset-0 flex items-center justify-center bg-[#e8f4f8]">
         <p className="text-zinc-500">No state/province data available for {countryName}.</p>
       </div>
     );
   }
 
   return (
-    <div className="relative flex-1 bg-[#e8f4f8]" onMouseMove={handleMouseMove}>
+    <div className="absolute inset-0 bg-[#e8f4f8]" onMouseMove={handleMouseMove}>
       <ComposableMap
         projection="geoMercator"
+        width={980}
+        height={551}
         style={{ width: '100%', height: '100%' }}
       >
         <ZoomableGroup zoom={zoom} minZoom={0.5} maxZoom={12}>
