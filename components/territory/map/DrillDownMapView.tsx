@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useCallback, useMemo, memo } from 'react';
+import { useState, useCallback, useEffect, useMemo, memo } from 'react';
 import { ComposableMap, ZoomableGroup, Geographies, Geography, Sphere, Graticule } from 'react-simple-maps';
+import { geoMercator } from 'd3-geo';
 import { useCountryStates } from '@/hooks/useCountryStates';
 import type { StateFeature } from '@/hooks/useCountryStates';
 import { useCountryFillColor, useActions } from '@/hooks/useTerritoryStore';
@@ -67,11 +68,31 @@ const StateGeo = memo(function StateGeo({
   );
 });
 
+const MAP_W = 980;
+const MAP_H = 551;
+
+// Fit a geoMercator projection to the features and return the geographic
+// center and zoom factor that fills the viewport with 10% padding.
+function fitFeatures(features: StateFeature[]): { center: [number, number]; zoom: number } {
+  if (features.length === 0) return { center: [0, 20], zoom: 1 };
+  const baseScale = 140;
+  const collection = { type: 'FeatureCollection' as const, features };
+  // fitSize with 80% of the viewport leaves visible margin around the country
+  const fitted = geoMercator().fitSize([MAP_W * 0.8, MAP_H * 0.8], collection as Parameters<ReturnType<typeof geoMercator>['fitSize']>[1]);
+  const fittedCenter = fitted.invert!([MAP_W / 2, MAP_H / 2]) as [number, number];
+  return { center: fittedCenter, zoom: fitted.scale() / baseScale };
+}
+
 export default function DrillDownMapView({ countryIso2, countryName }: DrillDownMapViewProps) {
   const { features, loading, error } = useCountryStates(countryIso2);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [popover, setPopover] = useState<PopoverState | null>(null);
-  const [zoom, setZoom] = useState(1);
+
+  // Derive center + zoom from features whenever the country changes
+  const { center, zoom: initialZoom } = useMemo(() => fitFeatures(features), [features]);
+  const [zoom, setZoom] = useState(initialZoom);
+  // Reset zoom when switching between countries
+  useEffect(() => { setZoom(initialZoom); }, [initialZoom]);
 
   // Stable reference for Geographies
   const featureCollection = useMemo(
@@ -128,7 +149,7 @@ export default function DrillDownMapView({ countryIso2, countryName }: DrillDown
         height={551}
         style={{ width: '100%', height: '100%' }}
       >
-        <ZoomableGroup zoom={zoom} minZoom={0.5} maxZoom={12}>
+        <ZoomableGroup center={center} zoom={zoom} minZoom={0.5} maxZoom={80}>
           <Sphere fill="#cde8f5" stroke="#b0cdd8" strokeWidth={0.5} />
           <Graticule stroke="#d5e8ef" strokeWidth={0.3} step={[20, 20]} />
           <Geographies geography={featureCollection}>
@@ -147,13 +168,13 @@ export default function DrillDownMapView({ countryIso2, countryName }: DrillDown
 
       {/* Zoom controls */}
       <div className="absolute right-4 top-4 flex flex-col gap-1">
-        <button onClick={() => setZoom((z) => Math.min(z * 1.5, 12))}
+        <button onClick={() => setZoom((z) => Math.min(z * 1.5, 80))}
           className="flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-200 bg-white text-sm font-bold shadow hover:bg-zinc-50"
           aria-label="Zoom in">+</button>
         <button onClick={() => setZoom((z) => Math.max(z / 1.5, 0.5))}
           className="flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-200 bg-white text-sm font-bold shadow hover:bg-zinc-50"
           aria-label="Zoom out">−</button>
-        <button onClick={() => setZoom(1)}
+        <button onClick={() => setZoom(initialZoom)}
           className="flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-200 bg-white text-xs shadow hover:bg-zinc-50"
           aria-label="Reset zoom">⊙</button>
       </div>
