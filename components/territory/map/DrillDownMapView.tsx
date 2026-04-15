@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useCallback, useEffect, useMemo, memo } from 'react';
-import { ComposableMap, ZoomableGroup, Geographies, Geography, Sphere, Graticule } from 'react-simple-maps';
+import { useState, useCallback, useEffect, useMemo, useRef, memo } from 'react';
+import { ComposableMap, ZoomableGroup, Geographies, Geography, Graticule } from 'react-simple-maps';
 import { geoMercator } from 'd3-geo';
 import { useCountryStates } from '@/hooks/useCountryStates';
 import type { StateFeature } from '@/hooks/useCountryStates';
-import { useCountryFillColor, useActions } from '@/hooks/useTerritoryStore';
+import { useCountryFillColor, useMapTheme, useActions } from '@/hooks/useTerritoryStore';
+import { DrillDownAccountLayer } from './AccountLayer';
 import MapLegend from './MapLegend';
 import MapTooltip from './MapTooltip';
 import AssignPopover from './AssignPopover';
@@ -33,27 +34,40 @@ interface EnrichedStateGeo {
 const StateGeo = memo(function StateGeo({
   geo,
   onClickState,
+  unassignedFill,
+  unassignedHover,
+  hoverOpacity,
+  stateStroke,
+  stateStrokeWidth,
+  transition,
 }: {
   geo: EnrichedStateGeo;
   onClickState: (entityCode: string, name: string, x: number, y: number) => void;
+  unassignedFill: string;
+  unassignedHover: string;
+  hoverOpacity: number;
+  stateStroke: string;
+  stateStrokeWidth: number;
+  transition: string;
 }) {
   const entityCode = `${geo.iso2}:${geo.id}`;
   const fill = useCountryFillColor(entityCode);
-  const { setHoveredEntityCode } = useActions();
+  const { setHoveredEntityCode, setHoveredEntityIso } = useActions();
+  const isUnassigned = fill === unassignedFill;
 
   return (
     <Geography
       geography={geo as unknown as import('react-simple-maps').GeographyFeature}
       fill={fill}
-      stroke="#fff"
-      strokeWidth={0.8}
+      stroke={stateStroke}
+      strokeWidth={stateStrokeWidth}
       style={{
-        default: { outline: 'none', cursor: 'pointer', transition: 'fill 150ms ease' },
-        hover:   { outline: 'none', fill: fill === '#d1d5db' ? '#b0b7c0' : fill, opacity: 0.82 },
+        default: { outline: 'none', cursor: 'pointer', transition },
+        hover:   { outline: 'none', fill: isUnassigned ? unassignedHover : fill, opacity: hoverOpacity },
         pressed: { outline: 'none' },
       }}
-      onMouseEnter={() => setHoveredEntityCode(`${geo.name} (${geo.id})`)}
-      onMouseLeave={() => setHoveredEntityCode(null)}
+      onMouseEnter={() => { setHoveredEntityCode(`${geo.name} (${geo.id})`); setHoveredEntityIso(entityCode); }}
+      onMouseLeave={() => { setHoveredEntityCode(null); setHoveredEntityIso(null); }}
       onClick={(e: React.MouseEvent) => onClickState(entityCode, geo.name, e.clientX, e.clientY)}
       role="button"
       aria-label={geo.name}
@@ -83,16 +97,33 @@ function fitFeatures(features: StateFeature[]): { center: [number, number]; zoom
   return { center: fittedCenter, zoom: fitted.scale() / baseScale };
 }
 
+const isAlbersUsa = (iso2: string) => iso2 === 'US';
+
 export default function DrillDownMapView({ countryIso2, countryName }: DrillDownMapViewProps) {
   const { features, loading, error } = useCountryStates(countryIso2);
+  const theme = useMapTheme();
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [popover, setPopover] = useState<PopoverState | null>(null);
+  const useAlbers = isAlbersUsa(countryIso2);
 
-  // Derive center + zoom from features whenever the country changes
-  const { center, zoom: initialZoom } = useMemo(() => fitFeatures(features), [features]);
+  // Derive center + zoom from features whenever the country changes (not used for AlbersUSA)
+  const { center, zoom: initialZoom } = useMemo(
+    () => (useAlbers ? { center: [-96, 38] as [number, number], zoom: 1 } : fitFeatures(features)),
+    [features, useAlbers],
+  );
+  const [prevInitialZoom, setPrevInitialZoom] = useState(initialZoom);
+  const [prevCenter, setPrevCenter] = useState(center);
   const [zoom, setZoom] = useState(initialZoom);
-  // Reset zoom when switching between countries
-  useEffect(() => { setZoom(initialZoom); }, [initialZoom]);
+  const [currentCenter, setCurrentCenter] = useState<[number, number]>(center);
+  const zoomRef = useRef(zoom);
+  useEffect(() => { zoomRef.current = zoom; }, [zoom]);
+  // getDerivedStateFromProps: reset zoom + center when country/features change
+  if (prevInitialZoom !== initialZoom || prevCenter[0] !== center[0] || prevCenter[1] !== center[1]) {
+    setPrevInitialZoom(initialZoom);
+    setPrevCenter(center);
+    setZoom(initialZoom);
+    setCurrentCenter(center);
+  }
 
   // Stable reference for Geographies
   const featureCollection = useMemo(
@@ -113,7 +144,7 @@ export default function DrillDownMapView({ countryIso2, countryName }: DrillDown
 
   if (loading) {
     return (
-      <div className="absolute inset-0 flex items-center justify-center bg-[#e8f4f8]">
+      <div className="absolute inset-0 flex items-center justify-center" style={{ background: theme.bg }}>
         <div className="flex items-center gap-2 text-zinc-500">
           <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -127,7 +158,7 @@ export default function DrillDownMapView({ countryIso2, countryName }: DrillDown
 
   if (error) {
     return (
-      <div className="absolute inset-0 flex items-center justify-center bg-[#e8f4f8]">
+      <div className="absolute inset-0 flex items-center justify-center" style={{ background: theme.bg }}>
         <div className="text-red-500">Failed to load states: {error}</div>
       </div>
     );
@@ -135,23 +166,45 @@ export default function DrillDownMapView({ countryIso2, countryName }: DrillDown
 
   if (features.length === 0) {
     return (
-      <div className="absolute inset-0 flex items-center justify-center bg-[#e8f4f8]">
+      <div className="absolute inset-0 flex items-center justify-center" style={{ background: theme.bg }}>
         <p className="text-zinc-500">No state/province data available for {countryName}.</p>
       </div>
     );
   }
 
+  const isZoomed = zoom > initialZoom * 1.05;
+
   return (
-    <div className="absolute inset-0 bg-[#e8f4f8]" onMouseMove={handleMouseMove}>
+    <div
+      className="absolute inset-0"
+      style={{ background: useAlbers ? theme.bg : theme.sphereFill, cursor: isZoomed ? 'grab' : 'default' }}
+      onMouseMove={handleMouseMove}
+    >
       <ComposableMap
-        projection="geoMercator"
+        projection={useAlbers ? 'geoAlbersUsa' : 'geoMercator'}
+        projectionConfig={useAlbers ? { scale: 900 } : undefined}
         width={980}
         height={551}
         style={{ width: '100%', height: '100%' }}
       >
-        <ZoomableGroup center={center} zoom={zoom} minZoom={0.5} maxZoom={80}>
-          <Sphere fill="#cde8f5" stroke="#b0cdd8" strokeWidth={0.5} />
-          <Graticule stroke="#d5e8ef" strokeWidth={0.3} step={[20, 20]} />
+        <ZoomableGroup
+          center={currentCenter}
+          zoom={zoom}
+          minZoom={initialZoom}
+          maxZoom={80}
+          // filterZoomEvent exists at runtime but is missing from the bundled types
+          {...({ filterZoomEvent: (evt: Event) => {
+            if (evt.type === 'wheel' || evt.type === 'dblclick') return true;
+            return zoomRef.current > initialZoom * 1.05;
+          }} as Record<string, unknown>)}
+          onMoveEnd={({ coordinates, zoom: z }) => {
+            setCurrentCenter(coordinates as [number, number]);
+            setZoom(z);
+          }}
+        >
+          {!useAlbers && theme.graticuleStroke && (
+            <Graticule stroke={theme.graticuleStroke} strokeWidth={theme.graticuleWidth} step={[20, 20]} />
+          )}
           <Geographies geography={featureCollection}>
             {({ geographies }) =>
               geographies.map((geo) => (
@@ -159,23 +212,30 @@ export default function DrillDownMapView({ countryIso2, countryName }: DrillDown
                   key={geo.rsmKey}
                   geo={geo as unknown as EnrichedStateGeo}
                   onClickState={handleClickState}
+                  unassignedFill={theme.unassignedFill}
+                  unassignedHover={theme.unassignedHover}
+                  hoverOpacity={theme.hoverOpacity}
+                  stateStroke={theme.stateStroke}
+                  stateStrokeWidth={theme.stateStrokeWidth}
+                  transition={theme.transition}
                 />
               ))
             }
           </Geographies>
+          <DrillDownAccountLayer countryIso2={countryIso2} features={features} zoom={zoom} />
         </ZoomableGroup>
       </ComposableMap>
 
       {/* Zoom controls */}
       <div className="absolute right-4 top-4 flex flex-col gap-1">
         <button onClick={() => setZoom((z) => Math.min(z * 1.5, 80))}
-          className="flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-200 bg-white text-sm font-bold shadow hover:bg-zinc-50"
+          className={theme.zoomBtnClass}
           aria-label="Zoom in">+</button>
-        <button onClick={() => setZoom((z) => Math.max(z / 1.5, 0.5))}
-          className="flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-200 bg-white text-sm font-bold shadow hover:bg-zinc-50"
+        <button onClick={() => setZoom((z) => Math.max(z / 1.5, initialZoom))}
+          className={theme.zoomBtnClass}
           aria-label="Zoom out">−</button>
-        <button onClick={() => setZoom(initialZoom)}
-          className="flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-200 bg-white text-xs shadow hover:bg-zinc-50"
+        <button onClick={() => { setZoom(initialZoom); setCurrentCenter(center); }}
+          className={theme.zoomBtnClass}
           aria-label="Reset zoom">⊙</button>
       </div>
 

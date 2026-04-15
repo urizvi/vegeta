@@ -1,3 +1,8 @@
+import type { MapThemeId } from '@/lib/mapThemes';
+import type { Account } from './account';
+export type { MapThemeId };
+export type { Account };
+
 export type HierarchyLevel = 'IC' | 'Lead' | 'Manager' | 'Director' | 'VP' | 'CRO';
 
 export interface Member {
@@ -24,6 +29,14 @@ export interface Region {
   countryCodes: string[]; // ISO 3166-1 alpha-2
 }
 
+export interface Subregion {
+  id: string;
+  name: string;
+  parentRegionId: string;
+  stateCodes: string[]; // iso_3166_2 codes e.g. "US-CA", "GB-ENG"
+  teamId: string | null;  // which team owns this subregion
+}
+
 export type AssignmentEntityType = 'country' | 'state';
 
 export interface Assignment {
@@ -40,12 +53,20 @@ export interface TerritoryStoreState {
   teams: Record<string, SalesTeam>;
   members: Record<string, Member>;
   regions: Record<string, Region>;
+  subregions: Record<string, Subregion>;
   assignments: Record<string, Assignment>; // key = entityCode
   teamOrder: string[];
   regionOrder: string[];
+  subregionOrder: string[];
+  // Accounts
+  accounts: Record<string, Account>;
+  accountOrder: string[];
+  showAccounts: boolean;
   // UI-only
   activeView: 'map' | 'spreadsheet';
+  mapThemeId: MapThemeId;
   drillDownCountryCode: string | null;
   selectedEntityCode: string | null;
   hoveredEntityCode: string | null;
+  hoveredEntityIso: string | null; // ISO2 or "US:US-CA" for account tooltip lookup
 }

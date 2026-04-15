@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useCallback, useMemo, memo } from 'react';
-import { ComposableMap, ZoomableGroup, Geographies, Geography, Sphere, Graticule } from 'react-simple-maps';
+import { useState, useCallback, useMemo, useRef, useEffect, memo } from 'react';
+import { ComposableMap, ZoomableGroup, Geographies, Geography, Graticule } from 'react-simple-maps';
 import { useGeoData } from '@/hooks/useGeoData';
-import { useCountryFillColor, useActions } from '@/hooks/useTerritoryStore';
+import { useCountryFillColor, useMapTheme, useActions } from '@/hooks/useTerritoryStore';
 import MapLegend from './MapLegend';
 import MapTooltip from './MapTooltip';
 import AssignPopover from './AssignPopover';
+import { WorldAccountLayer } from './AccountLayer';
 
 interface WorldMapViewProps {
   onDrillDown: (iso2: string, name: string) => void;
@@ -31,27 +32,40 @@ interface EnrichedGeo {
 const CountryGeo = memo(function CountryGeo({
   geo,
   onClickCountry,
+  unassignedFill,
+  unassignedHover,
+  hoverOpacity,
+  countryStroke,
+  countryStrokeWidth,
+  transition,
 }: {
   geo: EnrichedGeo;
   onClickCountry: (entityCode: string, name: string, x: number, y: number) => void;
+  unassignedFill: string;
+  unassignedHover: string;
+  hoverOpacity: number;
+  countryStroke: string;
+  countryStrokeWidth: number;
+  transition: string;
 }) {
   const entityCode = geo.iso2 || geo.id;
   const fill = useCountryFillColor(entityCode);
-  const { setHoveredEntityCode } = useActions();
+  const { setHoveredEntityCode, setHoveredEntityIso } = useActions();
+  const isUnassigned = fill === unassignedFill;
 
   return (
     <Geography
       geography={geo as unknown as import('react-simple-maps').GeographyFeature}
       fill={fill}
-      stroke="#fff"
-      strokeWidth={0.4}
+      stroke={countryStroke}
+      strokeWidth={countryStrokeWidth}
       style={{
-        default: { outline: 'none', cursor: 'pointer', transition: 'fill 150ms ease' },
-        hover:   { outline: 'none', fill: fill === '#d1d5db' ? '#b0b7c0' : fill, opacity: 0.82 },
+        default: { outline: 'none', cursor: 'pointer', transition },
+        hover:   { outline: 'none', fill: isUnassigned ? unassignedHover : fill, opacity: hoverOpacity },
         pressed: { outline: 'none' },
       }}
-      onMouseEnter={() => setHoveredEntityCode(geo.name)}
-      onMouseLeave={() => setHoveredEntityCode(null)}
+      onMouseEnter={() => { setHoveredEntityCode(geo.name); setHoveredEntityIso(entityCode); }}
+      onMouseLeave={() => { setHoveredEntityCode(null); setHoveredEntityIso(null); }}
       onClick={(e: React.MouseEvent) => onClickCountry(entityCode, geo.name, e.clientX, e.clientY)}
       role="button"
       aria-label={geo.name}
@@ -68,9 +82,12 @@ const CountryGeo = memo(function CountryGeo({
 
 export default function WorldMapView({ onDrillDown }: WorldMapViewProps) {
   const countries = useGeoData();
+  const theme = useMapTheme();
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [popover, setPopover] = useState<PopoverState | null>(null);
   const [zoom, setZoom] = useState(1);
+  const zoomRef = useRef(zoom);
+  useEffect(() => { zoomRef.current = zoom; }, [zoom]);
   const [center, setCenter] = useState<[number, number]>([0, 20]);
 
   // Stable reference — Geographies re-runs its effect whenever this changes
@@ -90,11 +107,17 @@ export default function WorldMapView({ onDrillDown }: WorldMapViewProps) {
     [],
   );
 
+  const isZoomed = zoom > 1.05;
+
   return (
-    <div className="absolute inset-0 bg-[#e8f4f8]" onMouseMove={handleMouseMove}>
+    <div
+      className="absolute inset-0"
+      style={{ background: theme.sphereFill, cursor: isZoomed ? 'grab' : 'default' }}
+      onMouseMove={handleMouseMove}
+    >
       <ComposableMap
         projection="geoMercator"
-        projectionConfig={{ scale: 140 }}
+        projectionConfig={{ scale: 160 }}
         width={980}
         height={551}
         style={{ width: '100%', height: '100%' }}
@@ -102,15 +125,21 @@ export default function WorldMapView({ onDrillDown }: WorldMapViewProps) {
         <ZoomableGroup
           center={center}
           zoom={zoom}
-          minZoom={0.8}
+          minZoom={1}
           maxZoom={8}
+          // filterZoomEvent exists at runtime but is missing from the bundled types
+          {...({ filterZoomEvent: (evt: Event) => {
+            if (evt.type === 'wheel' || evt.type === 'dblclick') return true;
+            return zoomRef.current > 1.05;
+          }} as Record<string, unknown>)}
           onMoveEnd={({ coordinates, zoom: z }) => {
             setCenter(coordinates as [number, number]);
             setZoom(z);
           }}
         >
-          <Sphere fill="#cde8f5" stroke="#b0cdd8" strokeWidth={0.5} />
-          <Graticule stroke="#d5e8ef" strokeWidth={0.3} step={[20, 20]} />
+          {theme.graticuleStroke && (
+            <Graticule stroke={theme.graticuleStroke} strokeWidth={theme.graticuleWidth} step={[20, 20]} />
+          )}
           <Geographies geography={featureCollection}>
             {({ geographies }) =>
               geographies.map((geo) => (
@@ -118,10 +147,17 @@ export default function WorldMapView({ onDrillDown }: WorldMapViewProps) {
                   key={geo.rsmKey}
                   geo={geo as unknown as EnrichedGeo}
                   onClickCountry={handleClickCountry}
+                  unassignedFill={theme.unassignedFill}
+                  unassignedHover={theme.unassignedHover}
+                  hoverOpacity={theme.hoverOpacity}
+                  countryStroke={theme.countryStroke}
+                  countryStrokeWidth={theme.countryStrokeWidth}
+                  transition={theme.transition}
                 />
               ))
             }
           </Geographies>
+          <WorldAccountLayer zoom={zoom} />
         </ZoomableGroup>
       </ComposableMap>
 
@@ -129,17 +165,17 @@ export default function WorldMapView({ onDrillDown }: WorldMapViewProps) {
       <div className="absolute right-4 top-4 flex flex-col gap-1">
         <button
           onClick={() => setZoom((z) => Math.min(z * 1.5, 8))}
-          className="flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-200 bg-white text-sm font-bold shadow hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800"
+          className={theme.zoomBtnClass}
           aria-label="Zoom in"
         >+</button>
         <button
-          onClick={() => setZoom((z) => Math.max(z / 1.5, 0.8))}
-          className="flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-200 bg-white text-sm font-bold shadow hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800"
+          onClick={() => setZoom((z) => Math.max(z / 1.5, 1))}
+          className={theme.zoomBtnClass}
           aria-label="Zoom out"
         >−</button>
         <button
           onClick={() => { setZoom(1); setCenter([0, 20]); }}
-          className="flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-200 bg-white text-xs shadow hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800"
+          className={theme.zoomBtnClass}
           aria-label="Reset zoom"
         >⊙</button>
       </div>

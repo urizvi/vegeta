@@ -5,13 +5,16 @@ import type {
   SalesTeam,
   Member,
   Region,
-  Assignment,
+  Subregion,
   AssignmentEntityType,
   CanonicalRegion,
   TerritoryStoreState,
+  Account,
 } from '@/types/territory';
 import { getTeamColor } from '@/lib/colorUtils';
 import { BUILT_IN_REGIONS } from '@/lib/regionData';
+import { DEFAULT_THEME_ID } from '@/lib/mapThemes';
+import type { MapThemeId } from '@/lib/mapThemes';
 
 interface TerritoryStoreActions {
   // Teams
@@ -26,8 +29,14 @@ interface TerritoryStoreActions {
 
   // Regions
   addRegion: (name: string, canonicalKey: CanonicalRegion, countryCodes: string[]) => void;
+  updateRegionCountries: (regionId: string, countryCodes: string[]) => void;
   removeRegion: (id: string) => void;
-  assignRegionToTeam: (regionId: string, teamId: string) => void;
+
+  // Subregions
+  addSubregion: (name: string, parentRegionId: string, stateCodes: string[], teamId: string | null) => void;
+  updateSubregion: (id: string, patch: Partial<Pick<Subregion, 'name' | 'stateCodes'>>) => void;
+  removeSubregion: (id: string) => void;
+  assignSubregionToTeam: (subregionId: string, teamId: string | null) => void;
 
   // Assignments
   setAssignment: (
@@ -43,11 +52,18 @@ interface TerritoryStoreActions {
     teamId: string,
   ) => void;
 
+  // Accounts
+  importAccounts: (rows: Omit<Account, 'id'>[]) => void;
+  clearAccounts: () => void;
+  toggleShowAccounts: () => void;
+
   // UI
   setActiveView: (view: 'map' | 'spreadsheet') => void;
+  setMapTheme: (themeId: MapThemeId) => void;
   setDrillDownCountryCode: (code: string | null) => void;
   setSelectedEntityCode: (code: string | null) => void;
   setHoveredEntityCode: (code: string | null) => void;
+  setHoveredEntityIso: (code: string | null) => void;
 
   // Serialisation
   exportState: () => string;
@@ -92,13 +108,20 @@ export const useTerritoryStore = create<TerritoryStore>()((set, get) => ({
   teams: initialTeams,
   members: {},
   regions: seedRegions,
+  subregions: {},
   assignments: {},
   teamOrder: initialTeamOrder,
   regionOrder: seedRegionOrder,
+  subregionOrder: [],
+  accounts: {},
+  accountOrder: [],
+  showAccounts: true,
   activeView: 'map',
+  mapThemeId: DEFAULT_THEME_ID,
   drillDownCountryCode: null,
   selectedEntityCode: null,
   hoveredEntityCode: null,
+  hoveredEntityIso: null,
 
   // ── Teams ──────────────────────────────────────────────────────────────
   addTeam(name, color) {
@@ -118,13 +141,14 @@ export const useTerritoryStore = create<TerritoryStore>()((set, get) => ({
 
   removeTeam(id) {
     set((s) => {
-      const { [id]: _, ...rest } = s.teams;
+      const teams = { ...s.teams };
+      delete teams[id];
       // Remove assignments for this team
       const assignments = Object.fromEntries(
         Object.entries(s.assignments).filter(([, a]) => a.teamId !== id),
       );
       return {
-        teams: rest,
+        teams,
         teamOrder: s.teamOrder.filter((tid) => tid !== id),
         assignments,
       };
@@ -154,9 +178,10 @@ export const useTerritoryStore = create<TerritoryStore>()((set, get) => ({
 
   removeMember(teamId, memberId) {
     set((s) => {
-      const { [memberId]: _, ...restMembers } = s.members;
+      const members = { ...s.members };
+      delete members[memberId];
       return {
-        members: restMembers,
+        members,
         teams: {
           ...s.teams,
           [teamId]: {
@@ -177,20 +202,60 @@ export const useTerritoryStore = create<TerritoryStore>()((set, get) => ({
     }));
   },
 
+  updateRegionCountries(regionId, countryCodes) {
+    set((s) => ({
+      regions: { ...s.regions, [regionId]: { ...s.regions[regionId], countryCodes } },
+    }));
+  },
+
   removeRegion(id) {
     set((s) => {
-      const { [id]: _, ...rest } = s.regions;
-      return { regions: rest, regionOrder: s.regionOrder.filter((rid) => rid !== id) };
+      const rest = { ...s.regions };
+      delete rest[id];
+      // Also remove child subregions
+      const removedSubregionIds = s.subregionOrder.filter(
+        (sid) => s.subregions[sid]?.parentRegionId === id,
+      );
+      const subregions = { ...s.subregions };
+      removedSubregionIds.forEach((sid) => delete subregions[sid]);
+      return {
+        regions: rest,
+        regionOrder: s.regionOrder.filter((rid) => rid !== id),
+        subregions,
+        subregionOrder: s.subregionOrder.filter((sid) => !removedSubregionIds.includes(sid)),
+      };
     });
   },
 
-  assignRegionToTeam(regionId, teamId) {
-    const region = get().regions[regionId];
-    if (!region) return;
-    // Country name lookup not available here — we'll pass names from the caller
-    // For now use code as name (caller can improve by passing feature names)
-    const items = region.countryCodes.map((code) => ({ code, name: code }));
-    get().bulkAssign(items, 'country', teamId);
+  // ── Subregions ─────────────────────────────────────────────────────────────
+  addSubregion(name, parentRegionId, stateCodes, teamId) {
+    const id = `subregion-${crypto.randomUUID()}`;
+    set((s) => ({
+      subregions: { ...s.subregions, [id]: { id, name, parentRegionId, stateCodes, teamId } },
+      subregionOrder: [...s.subregionOrder, id],
+    }));
+    // Color is derived live from subregion.teamId — no bulk assignments needed.
+  },
+
+  updateSubregion(id, patch) {
+    set((s) => ({
+      subregions: { ...s.subregions, [id]: { ...s.subregions[id], ...patch } },
+    }));
+  },
+
+  removeSubregion(id) {
+    set((s) => {
+      const subregions = { ...s.subregions };
+      delete subregions[id];
+      return { subregions, subregionOrder: s.subregionOrder.filter((sid) => sid !== id) };
+    });
+  },
+
+  assignSubregionToTeam(subregionId, teamId) {
+    // Color is derived live from subregion.teamId in useCountryFillColor — no bulk assignments needed.
+    set((s) => ({
+      subregions: { ...s.subregions, [subregionId]: { ...s.subregions[subregionId], teamId } },
+    }));
   },
 
   // ── Assignments ────────────────────────────────────────────────────────
@@ -206,8 +271,9 @@ export const useTerritoryStore = create<TerritoryStore>()((set, get) => ({
 
   clearAssignment(entityCode) {
     set((s) => {
-      const { [entityCode]: _, ...rest } = s.assignments;
-      return { assignments: rest };
+      const assignments = { ...s.assignments };
+      delete assignments[entityCode];
+      return { assignments };
     });
   },
 
@@ -228,16 +294,48 @@ export const useTerritoryStore = create<TerritoryStore>()((set, get) => ({
     });
   },
 
+  // ── Accounts ───────────────────────────────────────────────────────────
+  importAccounts(rows) {
+    set((s) => {
+      const accounts = { ...s.accounts };
+      const accountOrder = [...s.accountOrder];
+      rows.forEach((row) => {
+        const id = `account-${crypto.randomUUID()}`;
+        accounts[id] = { id, ...row };
+        accountOrder.push(id);
+      });
+      return { accounts, accountOrder };
+    });
+  },
+
+  clearAccounts() {
+    set({ accounts: {}, accountOrder: [] });
+  },
+
+  toggleShowAccounts() {
+    set((s) => ({ showAccounts: !s.showAccounts }));
+  },
+
   // ── UI ─────────────────────────────────────────────────────────────────
   setActiveView: (view) => set({ activeView: view }),
+  setMapTheme: (themeId) => set({ mapThemeId: themeId }),
   setDrillDownCountryCode: (code) => set({ drillDownCountryCode: code }),
   setSelectedEntityCode: (code) => set({ selectedEntityCode: code }),
   setHoveredEntityCode: (code) => set({ hoveredEntityCode: code }),
+  setHoveredEntityIso: (code) => set({ hoveredEntityIso: code }),
 
   // ── Serialisation ──────────────────────────────────────────────────────
   exportState() {
-    const { teams, members, regions, assignments, teamOrder, regionOrder } = get();
-    return JSON.stringify({ teams, members, regions, assignments, teamOrder, regionOrder });
+    const {
+      teams, members, regions, subregions, assignments,
+      teamOrder, regionOrder, subregionOrder,
+      accounts, accountOrder, mapThemeId,
+    } = get();
+    return JSON.stringify({
+      teams, members, regions, subregions, assignments,
+      teamOrder, regionOrder, subregionOrder,
+      accounts, accountOrder, mapThemeId,
+    });
   },
 
   importState(json) {

@@ -12,14 +12,11 @@ interface AddTeamModalProps {
 export default function AddTeamModal({ onClose }: AddTeamModalProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [name, setName] = useState('');
-  const [color, setColor] = useState('#3b82f6');
   const teamCount = useTeamOrder().length;
+  const [color, setColor] = useState(() => getTeamColor(teamCount));
   const { addTeam } = useActions();
 
-  useEffect(() => {
-    setColor(getTeamColor(teamCount));
-    dialogRef.current?.showModal();
-  }, [teamCount]);
+  useEffect(() => { dialogRef.current?.showModal(); }, []);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

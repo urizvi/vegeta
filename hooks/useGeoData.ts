@@ -4,7 +4,6 @@ import type { Topology, GeometryCollection } from 'topojson-specification';
 import { numericToIso2 } from '@/lib/geoUtils';
 
 // Static import — bundled once, synchronous, no loading state needed
-// eslint-disable-next-line @typescript-eslint/no-var-requires
 import worldTopoRaw from 'world-atlas/countries-110m.json';
 const worldTopo = worldTopoRaw as unknown as Topology;
 
