@@ -15,6 +15,8 @@ import { getTeamColor } from '@/lib/colorUtils';
 import { BUILT_IN_REGIONS } from '@/lib/regionData';
 import { DEFAULT_THEME_ID } from '@/lib/mapThemes';
 import type { MapThemeId } from '@/lib/mapThemes';
+import { ACCOUNT_DEFAULTS } from '@/lib/accountFields';
+import type { MapAccountMetric } from '@/lib/accountFields';
 
 interface TerritoryStoreActions {
   // Teams
@@ -53,9 +55,14 @@ interface TerritoryStoreActions {
   ) => void;
 
   // Accounts
-  importAccounts: (rows: Omit<Account, 'id'>[]) => void;
+  addAccount: (fields: Partial<Omit<Account, 'id'>> & { name: string; country: string }) => void;
+  updateAccount: (id: string, patch: Partial<Omit<Account, 'id'>>) => void;
+  deleteAccount: (id: string) => void;
+  deleteAccounts: (ids: string[]) => void;
+  importAccounts: (rows: Array<Partial<Omit<Account, 'id'>> & { name: string; country: string }>) => void;
   clearAccounts: () => void;
   toggleShowAccounts: () => void;
+  setMapAccountMetric: (metric: MapAccountMetric) => void;
 
   // UI
   setActiveView: (view: 'map' | 'spreadsheet') => void;
@@ -116,6 +123,7 @@ export const useTerritoryStore = create<TerritoryStore>()((set, get) => ({
   accounts: {},
   accountOrder: [],
   showAccounts: true,
+  mapAccountMetric: 'count',
   activeView: 'map',
   mapThemeId: DEFAULT_THEME_ID,
   drillDownCountryCode: null,
@@ -295,13 +303,45 @@ export const useTerritoryStore = create<TerritoryStore>()((set, get) => ({
   },
 
   // ── Accounts ───────────────────────────────────────────────────────────
+  addAccount(fields) {
+    const id = `account-${crypto.randomUUID()}`;
+    const account: Account = { id, ...ACCOUNT_DEFAULTS, ...fields };
+    set((s) => ({
+      accounts: { ...s.accounts, [id]: account },
+      accountOrder: [...s.accountOrder, id],
+    }));
+  },
+
+  updateAccount(id, patch) {
+    set((s) => ({
+      accounts: { ...s.accounts, [id]: { ...s.accounts[id], ...patch } },
+    }));
+  },
+
+  deleteAccount(id) {
+    set((s) => {
+      const accounts = { ...s.accounts };
+      delete accounts[id];
+      return { accounts, accountOrder: s.accountOrder.filter((aid) => aid !== id) };
+    });
+  },
+
+  deleteAccounts(ids) {
+    const idSet = new Set(ids);
+    set((s) => {
+      const accounts = { ...s.accounts };
+      ids.forEach((id) => delete accounts[id]);
+      return { accounts, accountOrder: s.accountOrder.filter((id) => !idSet.has(id)) };
+    });
+  },
+
   importAccounts(rows) {
     set((s) => {
       const accounts = { ...s.accounts };
       const accountOrder = [...s.accountOrder];
       rows.forEach((row) => {
         const id = `account-${crypto.randomUUID()}`;
-        accounts[id] = { id, ...row };
+        accounts[id] = { id, ...ACCOUNT_DEFAULTS, ...row } as Account;
         accountOrder.push(id);
       });
       return { accounts, accountOrder };
@@ -314,6 +354,10 @@ export const useTerritoryStore = create<TerritoryStore>()((set, get) => ({
 
   toggleShowAccounts() {
     set((s) => ({ showAccounts: !s.showAccounts }));
+  },
+
+  setMapAccountMetric(metric) {
+    set({ mapAccountMetric: metric });
   },
 
   // ── UI ─────────────────────────────────────────────────────────────────
@@ -329,12 +373,12 @@ export const useTerritoryStore = create<TerritoryStore>()((set, get) => ({
     const {
       teams, members, regions, subregions, assignments,
       teamOrder, regionOrder, subregionOrder,
-      accounts, accountOrder, mapThemeId,
+      accounts, accountOrder, mapThemeId, mapAccountMetric,
     } = get();
     return JSON.stringify({
       teams, members, regions, subregions, assignments,
       teamOrder, regionOrder, subregionOrder,
-      accounts, accountOrder, mapThemeId,
+      accounts, accountOrder, mapThemeId, mapAccountMetric,
     });
   },
 

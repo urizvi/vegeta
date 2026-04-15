@@ -64,24 +64,45 @@ export function detectColumn(headers: string[], aliases: string[]): string | und
   return headers.find((h) => aliases.includes(h.toLowerCase().trim()));
 }
 
-const NAME_ALIASES    = ['name', 'account', 'company', 'account name', 'company name', 'account_name', 'company_name'];
-const COUNTRY_ALIASES = ['country', 'country code', 'country_code', 'iso2', 'iso', 'country_iso'];
-const STATE_ALIASES   = ['state', 'province', 'state/province', 'state_province', 'territory', 'region'];
-const ARR_ALIASES     = ['arr', 'revenue', 'amount', 'annual revenue', 'annual_revenue', 'mrr', 'contract value', 'acv', 'deal value'];
+const NAME_ALIASES     = ['name', 'account', 'company', 'account name', 'company name', 'account_name', 'company_name'];
+const COUNTRY_ALIASES  = ['country', 'country code', 'country_code', 'iso2', 'iso', 'country_iso'];
+const STATE_ALIASES    = ['state', 'province', 'state/province', 'state_province'];
+const ARR_ALIASES      = ['arr', 'revenue', 'amount', 'annual revenue', 'annual_revenue', 'contract value', 'acv', 'deal value', 'annual contract value'];
+const MRR_ALIASES      = ['mrr', 'monthly revenue', 'monthly_revenue', 'monthly recurring revenue'];
+const HC_ALIASES       = ['headcount', 'employees', 'head count', 'employee count', 'num employees', 'company size'];
+const STAGE_ALIASES    = ['stage', 'deal stage', 'opportunity stage', 'lifecycle stage'];
+const SEGMENT_ALIASES  = ['segment', 'market segment', 'customer segment', 'company segment'];
+const INDUSTRY_ALIASES = ['industry', 'vertical', 'sector', 'industry vertical'];
+const TIER_ALIASES     = ['tier', 'account tier', 'priority tier', 'customer tier'];
+const REP_ALIASES      = ['rep', 'sales rep', 'owner', 'account owner', 'assigned to', 'assigned_to', 'sales_rep'];
 
 export interface DetectedColumns {
   name?: string;
   country?: string;
   state?: string;
   arr?: string;
+  mrr?: string;
+  headcount?: string;
+  stage?: string;
+  segment?: string;
+  industry?: string;
+  tier?: string;
+  rep?: string;
 }
 
 export function detectColumns(headers: string[]): DetectedColumns {
   return {
-    name:    detectColumn(headers, NAME_ALIASES),
-    country: detectColumn(headers, COUNTRY_ALIASES),
-    state:   detectColumn(headers, STATE_ALIASES),
-    arr:     detectColumn(headers, ARR_ALIASES),
+    name:     detectColumn(headers, NAME_ALIASES),
+    country:  detectColumn(headers, COUNTRY_ALIASES),
+    state:    detectColumn(headers, STATE_ALIASES),
+    arr:      detectColumn(headers, ARR_ALIASES),
+    mrr:      detectColumn(headers, MRR_ALIASES),
+    headcount: detectColumn(headers, HC_ALIASES),
+    stage:    detectColumn(headers, STAGE_ALIASES),
+    segment:  detectColumn(headers, SEGMENT_ALIASES),
+    industry: detectColumn(headers, INDUSTRY_ALIASES),
+    tier:     detectColumn(headers, TIER_ALIASES),
+    rep:      detectColumn(headers, REP_ALIASES),
   };
 }
 

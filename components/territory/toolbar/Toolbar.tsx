@@ -1,9 +1,15 @@
 'use client';
 
 import { useState } from 'react';
-import { useActiveView, useDrillDownCountryCode, useMapTheme, useAccountOrder, useShowAccounts, useActions } from '@/hooks/useTerritoryStore';
+import Link from 'next/link';
+import {
+  useActiveView, useDrillDownCountryCode, useMapTheme, useAccountOrder,
+  useShowAccounts, useMapAccountMetric, useActions,
+} from '@/hooks/useTerritoryStore';
 import { MAP_THEMES } from '@/lib/mapThemes';
+import { MAP_METRIC_OPTIONS } from '@/lib/accountFields';
 import type { MapThemeId } from '@/lib/mapThemes';
+import type { MapAccountMetric } from '@/lib/accountFields';
 import ImportAccountsModal from './ImportAccountsModal';
 
 interface ToolbarProps {
@@ -13,21 +19,36 @@ interface ToolbarProps {
 const THEME_ORDER: MapThemeId[] = ['deep-ocean', 'crisp-atlas', 'dark-studio'];
 
 export default function Toolbar({ drillDownCountryName }: ToolbarProps) {
-  const activeView = useActiveView();
-  const drillDownCode = useDrillDownCountryCode();
-  const activeTheme = useMapTheme();
-  const accountOrder = useAccountOrder();
-  const showAccounts = useShowAccounts();
-  const { setActiveView, setDrillDownCountryCode, setMapTheme, toggleShowAccounts, clearAccounts } = useActions();
+  const activeView       = useActiveView();
+  const drillDownCode    = useDrillDownCountryCode();
+  const activeTheme      = useMapTheme();
+  const accountOrder     = useAccountOrder();
+  const showAccounts     = useShowAccounts();
+  const mapMetric        = useMapAccountMetric();
+  const {
+    setActiveView, setDrillDownCountryCode, setMapTheme,
+    toggleShowAccounts, clearAccounts, setMapAccountMetric,
+  } = useActions();
   const [showImport, setShowImport] = useState(false);
 
   return (
     <>
     <header className="flex items-center gap-3 border-b border-zinc-200 bg-white px-4 py-2.5 dark:border-zinc-700 dark:bg-zinc-950">
-      {/* Logo */}
-      <span className="mr-2 text-sm font-bold text-zinc-800 dark:text-zinc-100">
+      {/* Logo + page nav */}
+      <span className="text-sm font-bold text-zinc-800 dark:text-zinc-100">
         Sales Deployment
       </span>
+      <div className="flex items-center rounded-lg border border-zinc-200 p-0.5 text-xs dark:border-zinc-700">
+        <span className="rounded-md bg-zinc-900 px-2.5 py-1 font-medium text-white dark:bg-zinc-100 dark:text-zinc-900">
+          Territory
+        </span>
+        <Link
+          href="/accounts"
+          className="rounded-md px-2.5 py-1 font-medium text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+        >
+          Accounts
+        </Link>
+      </div>
 
       {/* Breadcrumb */}
       <nav className="flex items-center gap-1 text-sm text-zinc-500">
@@ -71,16 +92,14 @@ export default function Toolbar({ drillDownCountryName }: ToolbarProps) {
             >
               <span
                 className="h-3.5 w-3.5 rounded-sm"
-                style={{
-                  background: `linear-gradient(135deg, ${t.previewOcean} 50%, ${t.previewLand} 50%)`,
-                }}
+                style={{ background: `linear-gradient(135deg, ${t.previewOcean} 50%, ${t.previewLand} 50%)` }}
               />
             </button>
           );
         })}
       </div>
 
-      {/* Accounts */}
+      {/* Accounts controls */}
       <div className="flex items-center gap-1">
         <button
           onClick={() => setShowImport(true)}
@@ -115,6 +134,18 @@ export default function Toolbar({ drillDownCountryName }: ToolbarProps) {
                 }
               </svg>
             </button>
+            {showAccounts && (
+              <select
+                value={mapMetric}
+                onChange={(e) => setMapAccountMetric(e.target.value as MapAccountMetric)}
+                title="Map metric"
+                className="rounded-lg border border-zinc-200 bg-white py-1 pl-2 pr-6 text-xs text-zinc-600 outline-none focus:border-blue-400 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+              >
+                {MAP_METRIC_OPTIONS.map((o) => (
+                  <option key={o.id} value={o.id}>{o.label}</option>
+                ))}
+              </select>
+            )}
             <button
               onClick={() => { if (confirm('Remove all imported accounts?')) clearAccounts(); }}
               title="Clear accounts"

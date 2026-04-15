@@ -1,81 +1,81 @@
-Name,Country,State,ARR
-Apex Dynamics,US,US-CA,142000
-Meridian Health Systems,US,US-TX,310000
-Brightwave Analytics,US,US-NY,88000
-Stratos Financial,US,US-IL,225000
-Ironclad Logistics,US,US-OH,67000
-Cascade Software,US,US-WA,198000
-Summit Energy Partners,US,US-CO,115000
-BlueSky Ventures,US,US-MA,275000
-Redwood Capital,US,US-CA,430000
-TerraForm Industries,US,US-TX,92000
-Vantage Point Media,US,US-NY,160000
-Harbinger Tech,US,US-GA,54000
-Orion Fleet Services,US,US-MI,38000
-Nexus Biotech,US,US-NC,210000
-Pinnacle Retail Group,US,US-FL,77000
-Alloy Systems,US,US-PA,133000
-Driftwood Consulting,US,US-MN,49000
-Focal Point Labs,US,US-WA,320000
-Criterion Data,US,US-CO,95000
-Lighthouse Insurance,US,US-CT,185000
-Quantum Freight,US,US-TN,61000
-Skyline Architecture,US,US-AZ,44000
-Ember Cloud,US,US-TX,270000
-Crossroads Payments,US,US-IL,155000
-Foundry Analytics,US,US-CA,380000
-Northstar Consulting,GB,,128000
-Albion Capital,GB,,215000
-Meridian Fintech,DE,,175000
-Rhine Digital,DE,,98000
-Soleil Media Group,FR,,143000
-Lumina Pharma,FR,,290000
-Nordic SaaS,SE,,112000
-Fjord Logistics,NO,,67000
-Polaris Energy,NO,,88000
-Baltic Data,FI,,55000
-Vortex Systems,NL,,201000
-Delta Commerce,NL,,134000
-Iberian Networks,ES,,76000
-Catalan Cloud,ES,,59000
-Adriatic Ventures,IT,,145000
-Roma Analytics,IT,,82000
-Danube Software,AT,,63000
-Alpine Fintech,CH,,310000
-Zenith Corp,AU,,178000
-Outback Logistics,AU,,94000
-Pacific Rim Data,AU,,137000
-Kiwi Analytics,NZ,,58000
-Sakura Technologies,JP,,245000
-Fuji Data Systems,JP,,189000
-Hanyang Group,KR,,167000
-Seoul SaaS,KR,,112000
-Dragon Commerce,CN,,320000
-Yangtze Analytics,CN,,215000
-Monsoon Data,IN,,88000
-Bangalore Cloud,IN,,134000
-Mumbai Fintech,IN,,76000
-Lion City Software,SG,,198000
-Merlion Analytics,SG,,143000
-Bumi Systems,ID,,67000
-Mekong Data,VN,,45000
-Condor Analytics,BR,,112000
-Copacabana Cloud,BR,,78000
-Andes Logistics,CO,,55000
-Pampas Software,AR,,43000
-Aztec Systems,MX,,134000
-Tequila Tech,MX,,89000
-Maple Cloud,CA,,210000
-Rockies Analytics,CA,,155000
-Savanna Data,ZA,,98000
-Nairobi SaaS,KE,,54000
-Lagos Commerce,NG,,41000
-Nile Analytics,EG,,67000
-Gulf Fintech,AE,,185000
-Riyadh Cloud,SA,,143000
-Doha Systems,QA,,112000
-Bosphorus Tech,TR,,88000
-Vistula Data,PL,,72000
-Danube Cloud,CZ,,61000
-Balkan Analytics,RS,,38000
-Adriatic SaaS,HR,,44000
+Name,Country,State,Stage,Segment,Industry,Tier,ARR,MRR,Headcount
+Apex Dynamics,US,US-CA,Customer,Enterprise,SaaS,Tier 1,142000,11833,320
+Meridian Health Systems,US,US-TX,Customer,Enterprise,Healthcare,Tier 1,310000,25833,850
+Brightwave Analytics,US,US-NY,Opportunity,Mid-Market,SaaS,Tier 2,88000,7333,145
+Stratos Financial,US,US-IL,Customer,Mid-Market,FinTech,Tier 2,225000,18750,410
+Ironclad Logistics,US,US-OH,Lead,SMB,Manufacturing,Tier 3,67000,5583,80
+Cascade Software,US,US-WA,Customer,Enterprise,SaaS,Tier 1,198000,16500,290
+Summit Energy Partners,US,US-CO,Opportunity,Mid-Market,Manufacturing,Tier 2,115000,9583,175
+BlueSky Ventures,US,US-MA,Customer,Enterprise,FinTech,Tier 1,275000,22917,520
+Redwood Capital,US,US-CA,Customer,Enterprise,FinTech,Tier 1,430000,35833,980
+TerraForm Industries,US,US-TX,Prospect,SMB,Manufacturing,Tier 3,92000,7667,110
+Vantage Point Media,US,US-NY,Customer,Mid-Market,Media,Tier 2,160000,13333,235
+Harbinger Tech,US,US-GA,Lead,SMB,SaaS,Tier 3,54000,4500,65
+Orion Fleet Services,US,US-MI,Prospect,SMB,Manufacturing,Tier 3,38000,3167,45
+Nexus Biotech,US,US-NC,Opportunity,Mid-Market,Healthcare,Tier 2,210000,17500,380
+Pinnacle Retail Group,US,US-FL,Customer,Mid-Market,E-commerce,Tier 2,77000,6417,120
+Alloy Systems,US,US-PA,Customer,Mid-Market,Manufacturing,Tier 2,133000,11083,195
+Driftwood Consulting,US,US-MN,Lead,SMB,SaaS,Tier 3,49000,4083,55
+Focal Point Labs,US,US-WA,Customer,Enterprise,SaaS,Tier 1,320000,26667,610
+Criterion Data,US,US-CO,Opportunity,Mid-Market,SaaS,Tier 2,95000,7917,140
+Lighthouse Insurance,US,US-CT,Customer,Enterprise,FinTech,Tier 1,185000,15417,350
+Quantum Freight,US,US-TN,Lead,SMB,Manufacturing,Tier 3,61000,5083,75
+Skyline Architecture,US,US-AZ,Prospect,SMB,Other,Tier 3,44000,3667,50
+Ember Cloud,US,US-TX,Customer,Enterprise,SaaS,Tier 1,270000,22500,490
+Crossroads Payments,US,US-IL,Opportunity,Mid-Market,FinTech,Tier 2,155000,12917,220
+Foundry Analytics,US,US-CA,Customer,Enterprise,SaaS,Tier 1,380000,31667,720
+Northstar Consulting,GB,,Customer,Mid-Market,SaaS,Tier 2,128000,10667,185
+Albion Capital,GB,,Customer,Enterprise,FinTech,Tier 1,215000,17917,390
+Meridian Fintech,DE,,Opportunity,Mid-Market,FinTech,Tier 2,175000,14583,260
+Rhine Digital,DE,,Customer,Mid-Market,SaaS,Tier 2,98000,8167,150
+Soleil Media Group,FR,,Customer,Mid-Market,Media,Tier 2,143000,11917,210
+Lumina Pharma,FR,,Customer,Enterprise,Healthcare,Tier 1,290000,24167,560
+Nordic SaaS,SE,,Opportunity,Mid-Market,SaaS,Tier 2,112000,9333,165
+Fjord Logistics,NO,,Lead,SMB,Manufacturing,Tier 3,67000,5583,80
+Polaris Energy,NO,,Opportunity,Mid-Market,Manufacturing,Tier 3,88000,7333,110
+Baltic Data,FI,,Lead,SMB,SaaS,Tier 3,55000,4583,65
+Vortex Systems,NL,,Customer,Enterprise,SaaS,Tier 1,201000,16750,380
+Delta Commerce,NL,,Customer,Mid-Market,E-commerce,Tier 2,134000,11167,195
+Iberian Networks,ES,,Opportunity,Mid-Market,SaaS,Tier 2,76000,6333,95
+Catalan Cloud,ES,,Lead,SMB,SaaS,Tier 3,59000,4917,70
+Adriatic Ventures,IT,,Customer,Mid-Market,SaaS,Tier 2,145000,12083,215
+Roma Analytics,IT,,Opportunity,Mid-Market,SaaS,Tier 2,82000,6833,105
+Danube Software,AT,,Lead,SMB,SaaS,Tier 3,63000,5250,75
+Alpine Fintech,CH,,Customer,Enterprise,FinTech,Tier 1,310000,25833,580
+Zenith Corp,AU,,Customer,Enterprise,SaaS,Tier 1,178000,14833,330
+Outback Logistics,AU,,Customer,Mid-Market,Manufacturing,Tier 2,94000,7833,140
+Pacific Rim Data,AU,,Opportunity,Mid-Market,SaaS,Tier 2,137000,11417,200
+Kiwi Analytics,NZ,,Lead,SMB,SaaS,Tier 3,58000,4833,68
+Sakura Technologies,JP,,Customer,Enterprise,SaaS,Tier 1,245000,20417,460
+Fuji Data Systems,JP,,Customer,Enterprise,Manufacturing,Tier 1,189000,15750,350
+Hanyang Group,KR,,Customer,Enterprise,Manufacturing,Tier 1,167000,13917,310
+Seoul SaaS,KR,,Opportunity,Mid-Market,SaaS,Tier 2,112000,9333,165
+Dragon Commerce,CN,,Customer,Enterprise,E-commerce,Tier 1,320000,26667,620
+Yangtze Analytics,CN,,Customer,Enterprise,SaaS,Tier 1,215000,17917,400
+Monsoon Data,IN,,Opportunity,Mid-Market,SaaS,Tier 2,88000,7333,130
+Bangalore Cloud,IN,,Customer,Mid-Market,SaaS,Tier 2,134000,11167,200
+Mumbai Fintech,IN,,Opportunity,Mid-Market,FinTech,Tier 2,76000,6333,95
+Lion City Software,SG,,Customer,Enterprise,SaaS,Tier 1,198000,16500,370
+Merlion Analytics,SG,,Customer,Mid-Market,SaaS,Tier 2,143000,11917,215
+Bumi Systems,ID,,Lead,SMB,SaaS,Tier 3,67000,5583,80
+Mekong Data,VN,,Prospect,SMB,SaaS,Tier 3,45000,3750,50
+Condor Analytics,BR,,Customer,Mid-Market,SaaS,Tier 2,112000,9333,165
+Copacabana Cloud,BR,,Opportunity,Mid-Market,SaaS,Tier 2,78000,6500,95
+Andes Logistics,CO,,Lead,SMB,Manufacturing,Tier 3,55000,4583,65
+Pampas Software,AR,,Prospect,SMB,SaaS,Tier 3,43000,3583,50
+Aztec Systems,MX,,Customer,Mid-Market,SaaS,Tier 2,134000,11167,200
+Tequila Tech,MX,,Opportunity,Mid-Market,SaaS,Tier 2,89000,7417,115
+Maple Cloud,CA,,Customer,Enterprise,SaaS,Tier 1,210000,17500,390
+Rockies Analytics,CA,,Customer,Mid-Market,SaaS,Tier 2,155000,12917,230
+Savanna Data,ZA,,Opportunity,Mid-Market,SaaS,Tier 2,98000,8167,145
+Nairobi SaaS,KE,,Lead,SMB,SaaS,Tier 3,54000,4500,65
+Lagos Commerce,NG,,Prospect,SMB,E-commerce,Tier 3,41000,3417,48
+Nile Analytics,EG,,Lead,SMB,SaaS,Tier 3,67000,5583,80
+Gulf Fintech,AE,,Customer,Enterprise,FinTech,Tier 1,185000,15417,350
+Riyadh Cloud,SA,,Customer,Mid-Market,SaaS,Tier 2,143000,11917,215
+Doha Systems,QA,,Opportunity,Mid-Market,SaaS,Tier 2,112000,9333,165
+Bosphorus Tech,TR,,Customer,Mid-Market,SaaS,Tier 2,88000,7333,130
+Vistula Data,PL,,Opportunity,Mid-Market,SaaS,Tier 2,72000,6000,90
+Danube Cloud,CZ,,Lead,SMB,SaaS,Tier 3,61000,5083,75
+Balkan Analytics,RS,,Prospect,SMB,SaaS,Tier 3,38000,3167,45
+Adriatic SaaS,HR,,Prospect,SMB,SaaS,Tier 3,44000,3667,52

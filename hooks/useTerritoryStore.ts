@@ -15,17 +15,24 @@ export const useHoveredEntityIso = () => useStore((s) => s.hoveredEntityIso);
 export const useAccounts = () => useStore((s) => s.accounts);
 export const useAccountOrder = () => useStore((s) => s.accountOrder);
 export const useShowAccounts = () => useStore((s) => s.showAccounts);
+export const useMapAccountMetric = () => useStore((s) => s.mapAccountMetric);
 
-/** Returns { count, arr } for accounts in the given territory, or null if none. */
+/** Returns aggregate stats for accounts in the given territory, or null if none. */
 export const useEntityAccountStats = (entityIso: string | null) =>
   useStore((s) => {
     if (!entityIso || !s.showAccounts || s.accountOrder.length === 0) return null;
     const isState = entityIso.includes(':');
     const accts = s.accountOrder
       .map((id) => s.accounts[id])
+      .filter(Boolean)
       .filter((a) => (isState ? a.state === entityIso : a.country === entityIso));
     if (accts.length === 0) return null;
-    return { count: accts.length, arr: accts.reduce((n, a) => n + a.arr, 0) };
+    return {
+      count:     accts.length,
+      arr:       accts.reduce((n, a) => n + a.arr, 0),
+      mrr:       accts.reduce((n, a) => n + a.mrr, 0),
+      headcount: accts.reduce((n, a) => n + a.headcount, 0),
+    };
   });
 export const useSelectedEntityCode = () => useStore((s) => s.selectedEntityCode);
 

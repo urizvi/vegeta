@@ -3,37 +3,48 @@
 import { memo, useMemo } from 'react';
 import { Marker } from 'react-simple-maps';
 import { geoCentroid } from 'd3-geo';
-import { useAccounts, useAccountOrder, useShowAccounts, useCountryFillColor, useMapTheme } from '@/hooks/useTerritoryStore';
+import {
+  useAccounts, useAccountOrder, useShowAccounts,
+  useCountryFillColor, useMapTheme, useMapAccountMetric,
+} from '@/hooks/useTerritoryStore';
 import { COUNTRY_CENTROIDS } from '@/lib/countryCentroids';
+import { formatMetric } from '@/lib/accountFields';
+import type { MapAccountMetric } from '@/lib/accountFields';
 import type { StateFeature } from '@/hooks/useCountryStates';
 
-// ── World map — one bubble per country ──────────────────────────────────────
+// ── Shared helpers ────────────────────────────────────────────────────────────
 
-interface WorldAccountLayerProps {
-  zoom: number;
+const UNASSIGNED_COLOR = '#ef4444';
+
+/** Radius [4, 18] normalised to the max value across all countries. */
+function scaledRadius(val: number, maxVal: number): number {
+  if (maxVal <= 0 || val <= 0) return 4;
+  return 4 + (Math.log(val + 1) / Math.log(maxVal + 1)) * 14;
 }
 
-const UNASSIGNED_COLOR = '#ef4444'; // red for unassigned territories
+function bubbleLabel(metric: MapAccountMetric, stats: CountryStats): string {
+  const val = stats[metric];
+  if (val <= 0) return '';
+  if (metric === 'count') return val > 1 ? String(val) : '';
+  return formatMetric(metric, val);
+}
 
-// Country bubble: reads its own fill color so it matches the territory assignment
+interface CountryStats { count: number; arr: number; mrr: number; headcount: number }
+
+// ── World map — one bubble per country ───────────────────────────────────────
+
+interface WorldAccountLayerProps { zoom: number }
+
 const CountryBubble = memo(function CountryBubble({
-  iso2,
-  count,
-  lat,
-  lng,
-  zoom,
+  iso2, scaledR, label, lat, lng, zoom,
 }: {
-  iso2: string;
-  count: number;
-  lat: number;
-  lng: number;
-  zoom: number;
+  iso2: string; scaledR: number; label: string; lat: number; lng: number; zoom: number;
 }) {
   const teamColor = useCountryFillColor(iso2);
   const theme = useMapTheme();
   const isUnassigned = teamColor === theme.unassignedFill;
   const fill = isUnassigned ? UNASSIGNED_COLOR : teamColor;
-  const r = Math.max(5, Math.min(16, 3 + Math.log(count + 1) * 3.5)) / zoom;
+  const r = scaledR / zoom;
   const fontSize = Math.max(6, 9 / zoom);
 
   return (
@@ -46,7 +57,7 @@ const CountryBubble = memo(function CountryBubble({
         strokeWidth={0.8 / zoom}
         style={{ pointerEvents: 'none' }}
       />
-      {count > 1 && (
+      {label && (
         <text
           textAnchor="middle"
           dominantBaseline="central"
@@ -55,7 +66,7 @@ const CountryBubble = memo(function CountryBubble({
           fill="#fff"
           style={{ pointerEvents: 'none', userSelect: 'none' }}
         >
-          {count > 99 ? '99+' : count}
+          {label}
         </text>
       )}
     </Marker>
@@ -63,21 +74,25 @@ const CountryBubble = memo(function CountryBubble({
 });
 
 export function WorldAccountLayer({ zoom }: WorldAccountLayerProps) {
-  const accounts = useAccounts();
-  const order = useAccountOrder();
-  const show = useShowAccounts();
+  const accounts   = useAccounts();
+  const order      = useAccountOrder();
+  const show       = useShowAccounts();
+  const metric     = useMapAccountMetric();
 
-  const byCountry = useMemo(() => {
-    const map: Record<string, { count: number; arr: number }> = {};
+  const { byCountry, maxVal } = useMemo(() => {
+    const map: Record<string, CountryStats> = {};
     order.forEach((id) => {
       const a = accounts[id];
       if (!a) return;
-      if (!map[a.country]) map[a.country] = { count: 0, arr: 0 };
+      if (!map[a.country]) map[a.country] = { count: 0, arr: 0, mrr: 0, headcount: 0 };
       map[a.country].count++;
-      map[a.country].arr += a.arr;
+      map[a.country].arr       += a.arr;
+      map[a.country].mrr       += a.mrr;
+      map[a.country].headcount += a.headcount;
     });
-    return map;
-  }, [accounts, order]);
+    const max = Math.max(1, ...Object.values(map).map((s) => s[metric]));
+    return { byCountry: map, maxVal: max };
+  }, [accounts, order, metric]);
 
   if (!show || order.length === 0) return null;
 
@@ -91,7 +106,8 @@ export function WorldAccountLayer({ zoom }: WorldAccountLayerProps) {
           <CountryBubble
             key={iso2}
             iso2={iso2}
-            count={stats.count}
+            scaledR={scaledRadius(stats[metric], maxVal)}
+            label={bubbleLabel(metric, stats)}
             lat={lat}
             lng={lng}
             zoom={zoom}
@@ -102,7 +118,7 @@ export function WorldAccountLayer({ zoom }: WorldAccountLayerProps) {
   );
 }
 
-// ── Drill-down — individual dot per account at state centroid ────────────────
+// ── Drill-down — individual dot per account at state centroid ─────────────────
 
 interface DrillDownAccountLayerProps {
   countryIso2: string;
@@ -110,15 +126,10 @@ interface DrillDownAccountLayerProps {
   zoom: number;
 }
 
-// State dot: reads fill color for state entity code
 const StateDot = memo(function StateDot({
-  entityCode,
-  coordinates,
-  zoom,
+  entityCode, coordinates, zoom,
 }: {
-  entityCode: string;
-  coordinates: [number, number];
-  zoom: number;
+  entityCode: string; coordinates: [number, number]; zoom: number;
 }) {
   const teamColor = useCountryFillColor(entityCode);
   const theme = useMapTheme();
@@ -142,16 +153,13 @@ const StateDot = memo(function StateDot({
 
 export function DrillDownAccountLayer({ countryIso2, features, zoom }: DrillDownAccountLayerProps) {
   const accounts = useAccounts();
-  const order = useAccountOrder();
-  const show = useShowAccounts();
+  const order    = useAccountOrder();
+  const show     = useShowAccounts();
 
-  // Build state code → centroid map from loaded GeoJSON features
   const stateCentroids = useMemo(() => {
     const map: Record<string, [number, number]> = {};
     features.forEach((f) => {
-      const centroid = geoCentroid(f as Parameters<typeof geoCentroid>[0]);
-      // centroid is [lng, lat]; Marker expects [lng, lat]
-      map[f.id] = centroid as [number, number];
+      map[f.id] = geoCentroid(f as Parameters<typeof geoCentroid>[0]) as [number, number];
     });
     return map;
   }, [features]);
@@ -167,8 +175,7 @@ export function DrillDownAccountLayer({ countryIso2, features, zoom }: DrillDown
     <>
       {countryAccounts.map((account) => {
         if (!account) return null;
-        // state is stored as "US:US-CA"; we need just the state code part for centroid lookup
-        const stateKey = account.state ? account.state.split(':')[1] : null;
+        const stateKey    = account.state ? account.state.split(':')[1] : null;
         const coordinates = stateKey ? stateCentroids[stateKey] : null;
         if (!coordinates) return null;
         return (
