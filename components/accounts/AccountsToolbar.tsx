@@ -1,29 +1,24 @@
 'use client';
 
 import Link from 'next/link';
-import { STAGE_OPTIONS, SEGMENT_OPTIONS, TIER_OPTIONS, INDUSTRY_OPTIONS } from '@/lib/accountFields';
-import type { AccountStage, AccountSegment, AccountTier, AccountIndustry } from '@/lib/accountFields';
-
-export interface AccountFilters {
-  stage?:    AccountStage;
-  segment?:  AccountSegment;
-  industry?: AccountIndustry;
-  tier?:     AccountTier;
-}
+import { useCategoricalFields } from '@/hooks/useTerritoryStore';
 
 interface Props {
-  search:      string;
-  filters:     AccountFilters;
-  totalCount:  number;
-  onSearch:    (v: string) => void;
-  onFilter:    (patch: Partial<AccountFilters>) => void;
-  onAdd:       () => void;
-  onImport:    () => void;
+  search:          string;
+  filters:         Record<string, string>;
+  totalCount:      number;
+  onSearch:        (v: string) => void;
+  onFilter:        (patch: Record<string, string>) => void;
+  onClearFilters:  () => void;
+  onAdd:           () => void;
+  onImport:        () => void;
+  onManageFields:  () => void;
 }
 
 export default function AccountsToolbar({
-  search, filters, totalCount, onSearch, onFilter, onAdd, onImport,
+  search, filters, totalCount, onSearch, onFilter, onClearFilters, onAdd, onImport, onManageFields,
 }: Props) {
+  const categoricalFields = useCategoricalFields();
   const selectCls = 'rounded-lg border border-zinc-200 bg-white py-1.5 pl-2.5 pr-6 text-xs text-zinc-600 outline-none focus:border-blue-400 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300';
   const activeCount = Object.values(filters).filter(Boolean).length;
 
@@ -47,6 +42,16 @@ export default function AccountsToolbar({
         <div className="flex-1" />
 
         {/* Actions */}
+        <button
+          onClick={onManageFields}
+          className="flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+          title="Manage custom fields"
+        >
+          <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M8 0a.75.75 0 01.75.75v1.5a5.5 5.5 0 013.574 1.48l1.062-1.061a.75.75 0 111.06 1.06l-1.06 1.062A5.5 5.5 0 0114.75 8h1.5a.75.75 0 010 1.5h-1.5a5.5 5.5 0 01-1.48 3.574l1.061 1.062a.75.75 0 11-1.06 1.06l-1.062-1.06A5.5 5.5 0 018 15.25v1.5a.75.75 0 01-1.5 0v-1.5a5.5 5.5 0 01-3.574-1.48l-1.062 1.061a.75.75 0 11-1.06-1.06l1.06-1.062A5.5 5.5 0 011.25 9.5H-.25a.75.75 0 010-1.5H1.25a5.5 5.5 0 011.48-3.574L1.669 3.364a.75.75 0 111.06-1.06l1.062 1.06A5.5 5.5 0 016.5 1.25V-.25a.75.75 0 011.5 0v1.5zm-2.5 8a2.5 2.5 0 105 0 2.5 2.5 0 00-5 0z" />
+          </svg>
+          Fields
+        </button>
         <button
           onClick={onImport}
           className="flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
@@ -78,33 +83,32 @@ export default function AccountsToolbar({
             value={search}
             onChange={(e) => onSearch(e.target.value)}
             placeholder="Search accounts…"
-            className="rounded-lg border border-zinc-200 bg-white py-1.5 pl-8 pr-3 text-xs text-zinc-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 w-52"
+            className="w-52 rounded-lg border border-zinc-200 bg-white py-1.5 pl-8 pr-3 text-xs text-zinc-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
           />
         </div>
 
-        <span className="text-zinc-200 dark:text-zinc-700">|</span>
+        {categoricalFields.length > 0 && (
+          <span className="text-zinc-200 dark:text-zinc-700">|</span>
+        )}
 
-        {/* Category filters */}
-        <select value={filters.stage ?? ''} onChange={(e) => onFilter({ stage: (e.target.value as AccountStage) || undefined })} className={selectCls}>
-          <option value="">All Stages</option>
-          {STAGE_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
-        </select>
-        <select value={filters.segment ?? ''} onChange={(e) => onFilter({ segment: (e.target.value as AccountSegment) || undefined })} className={selectCls}>
-          <option value="">All Segments</option>
-          {SEGMENT_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
-        </select>
-        <select value={filters.industry ?? ''} onChange={(e) => onFilter({ industry: (e.target.value as AccountIndustry) || undefined })} className={selectCls}>
-          <option value="">All Industries</option>
-          {INDUSTRY_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
-        </select>
-        <select value={filters.tier ?? ''} onChange={(e) => onFilter({ tier: (e.target.value as AccountTier) || undefined })} className={selectCls}>
-          <option value="">All Tiers</option>
-          {TIER_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
-        </select>
+        {/* Dynamic category filters */}
+        {categoricalFields.map((def) => (
+          <select
+            key={def.id}
+            value={filters[def.id] ?? ''}
+            onChange={(e) => onFilter({ [def.id]: e.target.value })}
+            className={selectCls}
+          >
+            <option value="">All {def.label}s</option>
+            {(def.options ?? []).map((o) => (
+              <option key={o} value={o}>{o}</option>
+            ))}
+          </select>
+        ))}
 
         {activeCount > 0 && (
           <button
-            onClick={() => onFilter({ stage: undefined, segment: undefined, industry: undefined, tier: undefined })}
+            onClick={onClearFilters}
             className="text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
           >
             Clear filters

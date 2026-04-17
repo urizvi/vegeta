@@ -4,12 +4,10 @@ import { useState } from 'react';
 import Link from 'next/link';
 import {
   useActiveView, useDrillDownCountryCode, useMapTheme, useAccountOrder,
-  useShowAccounts, useMapAccountMetric, useActions,
+  useShowAccounts, useMapAccountMetric, useActions, useMetricFields,
 } from '@/hooks/useTerritoryStore';
 import { MAP_THEMES } from '@/lib/mapThemes';
-import { MAP_METRIC_OPTIONS } from '@/lib/accountFields';
 import type { MapThemeId } from '@/lib/mapThemes';
-import type { MapAccountMetric } from '@/lib/accountFields';
 import ImportAccountsModal from './ImportAccountsModal';
 
 interface ToolbarProps {
@@ -19,12 +17,13 @@ interface ToolbarProps {
 const THEME_ORDER: MapThemeId[] = ['deep-ocean', 'crisp-atlas', 'dark-studio'];
 
 export default function Toolbar({ drillDownCountryName }: ToolbarProps) {
-  const activeView       = useActiveView();
-  const drillDownCode    = useDrillDownCountryCode();
-  const activeTheme      = useMapTheme();
-  const accountOrder     = useAccountOrder();
-  const showAccounts     = useShowAccounts();
-  const mapMetric        = useMapAccountMetric();
+  const activeView    = useActiveView();
+  const drillDownCode = useDrillDownCountryCode();
+  const activeTheme   = useMapTheme();
+  const accountOrder  = useAccountOrder();
+  const showAccounts  = useShowAccounts();
+  const mapMetric     = useMapAccountMetric();
+  const metricFields  = useMetricFields();
   const {
     setActiveView, setDrillDownCountryCode, setMapTheme,
     toggleShowAccounts, clearAccounts, setMapAccountMetric,
@@ -137,12 +136,13 @@ export default function Toolbar({ drillDownCountryName }: ToolbarProps) {
             {showAccounts && (
               <select
                 value={mapMetric}
-                onChange={(e) => setMapAccountMetric(e.target.value as MapAccountMetric)}
+                onChange={(e) => setMapAccountMetric(e.target.value)}
                 title="Map metric"
                 className="rounded-lg border border-zinc-200 bg-white py-1 pl-2 pr-6 text-xs text-zinc-600 outline-none focus:border-blue-400 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
               >
-                {MAP_METRIC_OPTIONS.map((o) => (
-                  <option key={o.id} value={o.id}>{o.label}</option>
+                <option value="count">Count</option>
+                {metricFields.map((f) => (
+                  <option key={f.id} value={f.id}>{f.label}</option>
                 ))}
               </select>
             )}

@@ -5,11 +5,10 @@ import { Marker } from 'react-simple-maps';
 import { geoCentroid } from 'd3-geo';
 import {
   useAccounts, useAccountOrder, useShowAccounts,
-  useCountryFillColor, useMapTheme, useMapAccountMetric,
+  useCountryFillColor, useMapTheme, useMapAccountMetric, useFieldDefs,
 } from '@/hooks/useTerritoryStore';
 import { COUNTRY_CENTROIDS } from '@/lib/countryCentroids';
-import { formatMetric } from '@/lib/accountFields';
-import type { MapAccountMetric } from '@/lib/accountFields';
+import { formatFieldValue } from '@/lib/accountFields';
 import type { StateFeature } from '@/hooks/useCountryStates';
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
@@ -22,14 +21,7 @@ function scaledRadius(val: number, maxVal: number): number {
   return 4 + (Math.log(val + 1) / Math.log(maxVal + 1)) * 14;
 }
 
-function bubbleLabel(metric: MapAccountMetric, stats: CountryStats): string {
-  const val = stats[metric];
-  if (val <= 0) return '';
-  if (metric === 'count') return val > 1 ? String(val) : '';
-  return formatMetric(metric, val);
-}
-
-interface CountryStats { count: number; arr: number; mrr: number; headcount: number }
+type CountryStats = { count: number } & Record<string, number>;
 
 // ── World map — one bubble per country ───────────────────────────────────────
 
@@ -74,25 +66,33 @@ const CountryBubble = memo(function CountryBubble({
 });
 
 export function WorldAccountLayer({ zoom }: WorldAccountLayerProps) {
-  const accounts   = useAccounts();
-  const order      = useAccountOrder();
-  const show       = useShowAccounts();
-  const metric     = useMapAccountMetric();
+  const accounts  = useAccounts();
+  const order     = useAccountOrder();
+  const show      = useShowAccounts();
+  const metric    = useMapAccountMetric();
+  const fieldDefs = useFieldDefs();
 
   const { byCountry, maxVal } = useMemo(() => {
+    const metricFieldIds = fieldDefs.filter((f) => f.type === 'metric').map((f) => f.id);
     const map: Record<string, CountryStats> = {};
     order.forEach((id) => {
       const a = accounts[id];
       if (!a) return;
-      if (!map[a.country]) map[a.country] = { count: 0, arr: 0, mrr: 0, headcount: 0 };
+      if (!map[a.country]) {
+        const stats: CountryStats = { count: 0 };
+        metricFieldIds.forEach((fid) => { stats[fid] = 0; });
+        map[a.country] = stats;
+      }
       map[a.country].count++;
-      map[a.country].arr       += a.arr;
-      map[a.country].mrr       += a.mrr;
-      map[a.country].headcount += a.headcount;
+      metricFieldIds.forEach((fid) => {
+        map[a.country][fid] = (map[a.country][fid] ?? 0) + (Number(a.fields[fid]) || 0);
+      });
     });
-    const max = Math.max(1, ...Object.values(map).map((s) => s[metric]));
+    const max = Math.max(1, ...Object.values(map).map((s) => s[metric] ?? 0));
     return { byCountry: map, maxVal: max };
-  }, [accounts, order, metric]);
+  }, [accounts, order, metric, fieldDefs]);
+
+  const fieldDef = fieldDefs.find((f) => f.id === metric);
 
   if (!show || order.length === 0) return null;
 
@@ -102,12 +102,16 @@ export function WorldAccountLayer({ zoom }: WorldAccountLayerProps) {
         const centroid = COUNTRY_CENTROIDS[iso2];
         if (!centroid) return null;
         const [lat, lng] = centroid;
+        const val = stats[metric] ?? 0;
+        const label = metric === 'count'
+          ? (val > 1 ? String(val) : '')
+          : (fieldDef ? formatFieldValue(val, fieldDef) : String(val));
         return (
           <CountryBubble
             key={iso2}
             iso2={iso2}
-            scaledR={scaledRadius(stats[metric], maxVal)}
-            label={bubbleLabel(metric, stats)}
+            scaledR={scaledRadius(val, maxVal)}
+            label={label}
             lat={lat}
             lng={lng}
             zoom={zoom}

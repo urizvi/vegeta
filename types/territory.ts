@@ -1,7 +1,8 @@
 import type { MapThemeId } from '@/lib/mapThemes';
-import type { Account, MapAccountMetric } from './account';
+import type { FieldDefinition } from '@/lib/accountFields';
+import type { Account } from './account';
 export type { MapThemeId };
-export type { Account, MapAccountMetric };
+export type { Account };
 
 export type HierarchyLevel = 'IC' | 'Lead' | 'Manager' | 'Director' | 'VP' | 'CRO';
 
@@ -61,8 +62,9 @@ export interface TerritoryStoreState {
   // Accounts
   accounts: Record<string, Account>;
   accountOrder: string[];
+  fieldDefs: FieldDefinition[];
   showAccounts: boolean;
-  mapAccountMetric: MapAccountMetric;
+  mapAccountMetric: string; // field id or 'count'
   // UI-only
   activeView: 'map' | 'spreadsheet';
   mapThemeId: MapThemeId;

@@ -1,64 +1,52 @@
-export type AccountStage    = 'Prospect' | 'Lead' | 'Opportunity' | 'Customer' | 'Churned';
-export type AccountSegment  = 'SMB' | 'Mid-Market' | 'Enterprise';
-export type AccountTier     = 'Tier 1' | 'Tier 2' | 'Tier 3' | 'Untiered';
-export type AccountIndustry =
-  | 'SaaS' | 'FinTech' | 'Healthcare' | 'E-commerce' | 'Manufacturing'
-  | 'Education' | 'Media' | 'Government' | 'Other';
-export type MapAccountMetric = 'count' | 'arr' | 'mrr' | 'headcount';
+export type FieldType = 'categorical' | 'metric' | 'text';
 
-export const STAGE_OPTIONS:    readonly AccountStage[]    = ['Prospect', 'Lead', 'Opportunity', 'Customer', 'Churned'];
-export const SEGMENT_OPTIONS:  readonly AccountSegment[]  = ['SMB', 'Mid-Market', 'Enterprise'];
-export const TIER_OPTIONS:     readonly AccountTier[]     = ['Tier 1', 'Tier 2', 'Tier 3', 'Untiered'];
-export const INDUSTRY_OPTIONS: readonly AccountIndustry[] = [
-  'SaaS', 'FinTech', 'Healthcare', 'E-commerce', 'Manufacturing',
-  'Education', 'Media', 'Government', 'Other',
-];
-
-export const MAP_METRIC_OPTIONS: readonly { id: MapAccountMetric; label: string }[] = [
-  { id: 'count',     label: 'Count'     },
-  { id: 'arr',       label: 'ARR'       },
-  { id: 'mrr',       label: 'MRR'       },
-  { id: 'headcount', label: 'Headcount' },
-];
-
-export const STAGE_COLORS: Record<AccountStage, string> = {
-  Prospect:    '#94a3b8',
-  Lead:        '#60a5fa',
-  Opportunity: '#f59e0b',
-  Customer:    '#22c55e',
-  Churned:     '#ef4444',
-};
-
-/** Defaults applied whenever an account is created or imported without explicit values. */
-export const ACCOUNT_DEFAULTS = {
-  state:     undefined  as string | undefined,
-  arr:       0,
-  mrr:       0,
-  headcount: 0,
-  industry:  'Other'    as AccountIndustry,
-  stage:     'Prospect' as AccountStage,
-  segment:   'SMB'      as AccountSegment,
-  tier:      'Untiered' as AccountTier,
-  repId:     null       as string | null,
-} as const;
-
-/** Format a metric value for display (map bubbles, tooltips, table cells). */
-export function formatMetric(metric: MapAccountMetric, value: number): string {
-  if (value <= 0) return '—';
-  if (metric === 'arr' || metric === 'mrr') {
-    if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`;
-    if (value >= 1_000)     return `$${(value / 1_000).toFixed(0)}K`;
-    return `$${value.toLocaleString()}`;
-  }
-  return value.toLocaleString();
+export interface FieldDefinition {
+  id: string;
+  label: string;
+  type: FieldType;
+  options?: string[];   // categorical only
+  isCurrency?: boolean; // metric only
 }
 
-/** Normalize a raw string to the nearest categorical option, or return fallback. */
-export function normalizeOption<T extends string>(
-  raw: string,
-  options: readonly T[],
-  fallback: T,
-): T {
+export const DEFAULT_FIELD_DEFS: FieldDefinition[] = [
+  { id: 'stage',     label: 'Stage',     type: 'categorical', options: ['Prospect', 'Lead', 'Opportunity', 'Customer', 'Churned'] },
+  { id: 'segment',   label: 'Segment',   type: 'categorical', options: ['SMB', 'Mid-Market', 'Enterprise'] },
+  { id: 'industry',  label: 'Industry',  type: 'categorical', options: ['SaaS', 'FinTech', 'Healthcare', 'E-commerce', 'Manufacturing', 'Education', 'Media', 'Government', 'Other'] },
+  { id: 'tier',      label: 'Tier',      type: 'categorical', options: ['Tier 1', 'Tier 2', 'Tier 3', 'Untiered'] },
+  { id: 'arr',       label: 'ARR',       type: 'metric',      isCurrency: true },
+  { id: 'mrr',       label: 'MRR',       type: 'metric',      isCurrency: true },
+  { id: 'headcount', label: 'Headcount', type: 'metric' },
+];
+
+const OPTION_PALETTE = [
+  '#94a3b8', '#60a5fa', '#f59e0b', '#22c55e', '#ef4444',
+  '#a78bfa', '#fb923c', '#34d399', '#f472b6', '#38bdf8',
+  '#facc15', '#4ade80',
+];
+
+export function optionColor(index: number): string {
+  return OPTION_PALETTE[index % OPTION_PALETTE.length];
+}
+
+export function formatFieldValue(
+  value: string | number | undefined,
+  field: FieldDefinition,
+): string {
+  if (value === undefined || value === null || value === '') return '—';
+  if (field.type === 'metric') {
+    const n = Number(value);
+    if (n <= 0) return '—';
+    if (field.isCurrency) {
+      if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
+      if (n >= 1_000)     return `$${(n / 1_000).toFixed(0)}K`;
+      return `$${n.toLocaleString()}`;
+    }
+    return n.toLocaleString();
+  }
+  return String(value);
+}
+
+export function normalizeOption(raw: string, options: string[], fallback: string): string {
   const lower = raw.toLowerCase().trim();
   return options.find((o) => o.toLowerCase() === lower) ?? fallback;
 }

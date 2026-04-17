@@ -1,45 +1,59 @@
 'use client';
 
 import { useRef, useEffect, useState, useMemo } from 'react';
-import { useActions, useTeams, useTeamOrder, useMembers } from '@/hooks/useTerritoryStore';
+import { useActions, useTeams, useTeamOrder, useMembers, useFieldDefs } from '@/hooks/useTerritoryStore';
 import { useGeoData } from '@/hooks/useGeoData';
 import { useCountryStates } from '@/hooks/useCountryStates';
-import {
-  STAGE_OPTIONS, SEGMENT_OPTIONS, TIER_OPTIONS, INDUSTRY_OPTIONS, ACCOUNT_DEFAULTS,
-} from '@/lib/accountFields';
 import type { Account } from '@/types/account';
 
-type FormState = Omit<Account, 'id'>;
-
-const EMPTY_FORM: FormState = {
-  name: '',
-  country: '',
-  ...ACCOUNT_DEFAULTS,
-};
+interface FormState {
+  name: string;
+  country: string;
+  state?: string;
+  repId: string | null;
+  fields: Record<string, string | number>;
+}
 
 interface Props {
-  account?: Account;  // provided when editing; omit when creating
+  account?: Account;
   onClose: () => void;
 }
 
 export default function AddEditAccountModal({ account, onClose }: Props) {
   const dialogRef = useRef<HTMLDialogElement>(null);
-  const [form, setForm] = useState<FormState>(() =>
-    account ? { ...account } : { ...EMPTY_FORM },
-  );
+  const fieldDefs = useFieldDefs();
   const { addAccount, updateAccount } = useActions();
   const teams     = useTeams();
   const teamOrder = useTeamOrder();
   const members   = useMembers();
 
   const countries = useGeoData().filter((c) => c.iso2).sort((a, b) => a.name.localeCompare(b.name));
+  const [form, setForm] = useState<FormState>(() => {
+    if (account) {
+      return {
+        name: account.name,
+        country: account.country,
+        state: account.state,
+        repId: account.repId,
+        fields: { ...account.fields },
+      };
+    }
+    // Build defaults from fieldDefs
+    const fields: Record<string, string | number> = {};
+    fieldDefs.forEach((def) => {
+      if (def.type === 'metric') fields[def.id] = 0;
+      else if (def.type === 'categorical' && def.options?.length) fields[def.id] = def.options[0];
+      else fields[def.id] = '';
+    });
+    return { name: '', country: '', repId: null, fields };
+  });
+
   const { features: stateFeatures, loading: statesLoading } = useCountryStates(form.country || null);
   const stateOptions = useMemo(
     () => [...stateFeatures].sort((a, b) => a.name.localeCompare(b.name)),
     [stateFeatures],
   );
 
-  // All reps across all teams for the dropdown
   const allReps = useMemo(() =>
     teamOrder.flatMap((tid) => {
       const team = teams[tid];
@@ -54,8 +68,8 @@ export default function AddEditAccountModal({ account, onClose }: Props) {
 
   useEffect(() => { dialogRef.current?.showModal(); }, []);
 
-  function set<K extends keyof FormState>(key: K, value: FormState[K]) {
-    setForm((f) => ({ ...f, [key]: value }));
+  function setField(fieldId: string, value: string | number) {
+    setForm((f) => ({ ...f, fields: { ...f.fields, [fieldId]: value } }));
   }
 
   function handleCountryChange(iso2: string) {
@@ -69,11 +83,11 @@ export default function AddEditAccountModal({ account, onClose }: Props) {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.name.trim() || !form.country) return;
-    const cleaned = { ...form, name: form.name.trim() };
+    const data = { ...form, name: form.name.trim() };
     if (account) {
-      updateAccount(account.id, cleaned);
+      updateAccount(account.id, data);
     } else {
-      addAccount(cleaned);
+      addAccount(data);
     }
     onClose();
   }
@@ -83,6 +97,10 @@ export default function AddEditAccountModal({ account, onClose }: Props) {
   const inputCls = 'w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100';
   const selectCls = inputCls;
   const labelCls = 'mb-1 block text-xs font-medium text-zinc-500 dark:text-zinc-400';
+
+  const categoricalFields = fieldDefs.filter((f) => f.type === 'categorical');
+  const metricFields      = fieldDefs.filter((f) => f.type === 'metric');
+  const textFields        = fieldDefs.filter((f) => f.type === 'text');
 
   return (
     <dialog
@@ -105,14 +123,14 @@ export default function AddEditAccountModal({ account, onClose }: Props) {
       <form onSubmit={handleSubmit} className="max-h-[calc(100vh-12rem)] overflow-y-auto">
         <div className="space-y-5 p-5">
 
-          {/* Basic info */}
+          {/* Name */}
           <div>
             <label className={labelCls}>Account Name *</label>
             <input
               autoFocus
               required
               value={form.name}
-              onChange={(e) => set('name', e.target.value)}
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
               placeholder="e.g. Acme Corp"
               className={inputCls}
             />
@@ -163,77 +181,78 @@ export default function AddEditAccountModal({ account, onClose }: Props) {
             </div>
           </div>
 
-          {/* Classification */}
-          <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">Classification</p>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className={labelCls}>Stage</label>
-                <select value={form.stage} onChange={(e) => set('stage', e.target.value as typeof form.stage)} className={selectCls}>
-                  {STAGE_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className={labelCls}>Segment</label>
-                <select value={form.segment} onChange={(e) => set('segment', e.target.value as typeof form.segment)} className={selectCls}>
-                  {SEGMENT_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className={labelCls}>Industry</label>
-                <select value={form.industry} onChange={(e) => set('industry', e.target.value as typeof form.industry)} className={selectCls}>
-                  {INDUSTRY_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className={labelCls}>Tier</label>
-                <select value={form.tier} onChange={(e) => set('tier', e.target.value as typeof form.tier)} className={selectCls}>
-                  {TIER_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
-                </select>
+          {/* Categorical fields */}
+          {categoricalFields.length > 0 && (
+            <div>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">Classification</p>
+              <div className="grid grid-cols-2 gap-3">
+                {categoricalFields.map((def) => (
+                  <div key={def.id}>
+                    <label className={labelCls}>{def.label}</label>
+                    <select
+                      value={String(form.fields[def.id] ?? def.options?.[0] ?? '')}
+                      onChange={(e) => setField(def.id, e.target.value)}
+                      className={selectCls}
+                    >
+                      {(def.options ?? []).map((o) => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                  </div>
+                ))}
               </div>
             </div>
-          </div>
+          )}
 
-          {/* Metrics */}
-          <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">Metrics</p>
-            <div className="grid grid-cols-3 gap-3">
-              <div>
-                <label className={labelCls}>ARR ($)</label>
-                <input
-                  type="number" min={0} value={form.arr || ''}
-                  onChange={(e) => set('arr', parseFloat(e.target.value) || 0)}
-                  placeholder="0"
-                  className={inputCls}
-                />
-              </div>
-              <div>
-                <label className={labelCls}>MRR ($)</label>
-                <input
-                  type="number" min={0} value={form.mrr || ''}
-                  onChange={(e) => set('mrr', parseFloat(e.target.value) || 0)}
-                  placeholder="0"
-                  className={inputCls}
-                />
-              </div>
-              <div>
-                <label className={labelCls}>Headcount</label>
-                <input
-                  type="number" min={0} step={1} value={form.headcount || ''}
-                  onChange={(e) => set('headcount', parseInt(e.target.value) || 0)}
-                  placeholder="0"
-                  className={inputCls}
-                />
+          {/* Metric fields */}
+          {metricFields.length > 0 && (
+            <div>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">Metrics</p>
+              <div className="grid grid-cols-3 gap-3">
+                {metricFields.map((def) => (
+                  <div key={def.id}>
+                    <label className={labelCls}>
+                      {def.label}{def.isCurrency ? ' ($)' : ''}
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      step={def.isCurrency ? 'any' : '1'}
+                      value={Number(form.fields[def.id]) || ''}
+                      onChange={(e) => setField(def.id, parseFloat(e.target.value) || 0)}
+                      placeholder="0"
+                      className={inputCls}
+                    />
+                  </div>
+                ))}
               </div>
             </div>
-          </div>
+          )}
+
+          {/* Text fields */}
+          {textFields.length > 0 && (
+            <div>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">Details</p>
+              <div className="space-y-3">
+                {textFields.map((def) => (
+                  <div key={def.id}>
+                    <label className={labelCls}>{def.label}</label>
+                    <input
+                      type="text"
+                      value={String(form.fields[def.id] ?? '')}
+                      onChange={(e) => setField(def.id, e.target.value)}
+                      className={inputCls}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Assignment */}
           <div>
             <label className={labelCls}>Sales Rep</label>
             <select
               value={form.repId ?? ''}
-              onChange={(e) => set('repId', e.target.value || null)}
+              onChange={(e) => setForm((f) => ({ ...f, repId: e.target.value || null }))}
               className={selectCls}
             >
               <option value="">— unassigned —</option>

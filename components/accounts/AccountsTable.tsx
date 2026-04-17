@@ -1,38 +1,39 @@
 'use client';
 
 import { memo, useState, useCallback } from 'react';
-import { useActions } from '@/hooks/useTerritoryStore';
-import {
-  STAGE_OPTIONS, SEGMENT_OPTIONS, TIER_OPTIONS, INDUSTRY_OPTIONS,
-  STAGE_COLORS, formatMetric,
-} from '@/lib/accountFields';
+import { useActions, useFieldDefs } from '@/hooks/useTerritoryStore';
+import { optionColor, formatFieldValue } from '@/lib/accountFields';
+import type { FieldDefinition } from '@/lib/accountFields';
 import type { Account } from '@/types/account';
 import type { Member, SalesTeam } from '@/types/territory';
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Sort helpers ──────────────────────────────────────────────────────────────
 
-function fmtCurrency(n: number) {
-  if (n <= 0) return '—';
-  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000)     return `$${(n / 1_000).toFixed(0)}K`;
-  return `$${n.toLocaleString()}`;
+type SortKey = string; // 'name' | 'country' | 'state' | 'repId' | fieldId
+
+function getAccountValue(account: Account, key: SortKey): string | number {
+  if (key === 'name')    return account.name;
+  if (key === 'country') return account.country;
+  if (key === 'state')   return account.state ?? '';
+  if (key === 'repId')   return account.repId ?? '';
+  return account.fields[key] ?? '';
 }
 
-type SortField = keyof Account;
+// ── Sort header ───────────────────────────────────────────────────────────────
 
-function SortHeader({ label, field, sortField, sortDir, onSort, right }: {
-  label: string; field: SortField; sortField: SortField | null;
-  sortDir: 'asc' | 'desc'; onSort: (f: SortField) => void; right?: boolean;
+function SortHeader({ label, sortKey, activeSortKey, sortDir, onSort, right }: {
+  label: string; sortKey: SortKey; activeSortKey: SortKey | null;
+  sortDir: 'asc' | 'desc'; onSort: (k: SortKey) => void; right?: boolean;
 }) {
-  const active = sortField === field;
+  const active = activeSortKey === sortKey;
   return (
     <th
-      onClick={() => onSort(field)}
+      onClick={() => onSort(sortKey)}
       className={`cursor-pointer select-none whitespace-nowrap px-3 py-2.5 text-xs font-semibold text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 ${right ? 'text-right' : 'text-left'}`}
     >
       <span className={`inline-flex items-center gap-1 ${right ? 'justify-end' : ''}`}>
         {label}
-        <span className={`${active ? 'text-zinc-500' : 'text-zinc-300 dark:text-zinc-600'}`}>
+        <span className={active ? 'text-zinc-500' : 'text-zinc-300 dark:text-zinc-600'}>
           {active ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}
         </span>
       </span>
@@ -40,21 +41,20 @@ function SortHeader({ label, field, sortField, sortDir, onSort, right }: {
   );
 }
 
-// Inline-editable number cell
-const NumericCell = memo(function NumericCell({ id, field, value }: {
-  id: string; field: 'arr' | 'mrr' | 'headcount'; value: number;
+// ── Inline-editable metric cell ───────────────────────────────────────────────
+
+const MetricCell = memo(function MetricCell({ accountId, fieldDef, value }: {
+  accountId: string; fieldDef: FieldDefinition; value: number;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft,   setDraft]   = useState('');
-  const { updateAccount } = useActions();
+  const { setAccountField } = useActions();
 
   const commit = useCallback(() => {
-    const n = field === 'headcount'
-      ? parseInt(draft.replace(/[^0-9]/g, '')) || 0
-      : parseFloat(draft.replace(/[$,KMk]/g, '')) || 0;
-    updateAccount(id, { [field]: n });
+    const n = parseFloat(draft.replace(/[$,KMk\s]/g, '')) || 0;
+    setAccountField(accountId, fieldDef.id, n);
     setEditing(false);
-  }, [draft, field, id, updateAccount]);
+  }, [draft, accountId, fieldDef.id, setAccountField]);
 
   if (editing) {
     return (
@@ -70,18 +70,20 @@ const NumericCell = memo(function NumericCell({ id, field, value }: {
   }
   return (
     <button
-      onClick={() => { setDraft(String(value)); setEditing(true); }}
+      onClick={() => { setDraft(String(value || '')); setEditing(true); }}
       className="w-full text-right text-xs text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
       title="Click to edit"
     >
-      {field === 'headcount' ? formatMetric('headcount', value) : fmtCurrency(value)}
+      {formatFieldValue(value, fieldDef)}
     </button>
   );
 });
 
-// Single account row
-const AccountRow = memo(function AccountRow({ account, selected, members, teams, teamOrder, onToggleSelect, onEdit }: {
+// ── Account row ───────────────────────────────────────────────────────────────
+
+const AccountRow = memo(function AccountRow({ account, fieldDefs, selected, members, teams, teamOrder, onToggleSelect, onEdit }: {
   account: Account;
+  fieldDefs: FieldDefinition[];
   selected: boolean;
   members: Record<string, Member>;
   teams: Record<string, SalesTeam>;
@@ -89,7 +91,7 @@ const AccountRow = memo(function AccountRow({ account, selected, members, teams,
   onToggleSelect: (id: string) => void;
   onEdit: (id: string) => void;
 }) {
-  const { updateAccount, deleteAccount } = useActions();
+  const { updateAccount, setAccountField, deleteAccount } = useActions();
 
   const allReps = teamOrder.flatMap((tid) => {
     const team = teams[tid];
@@ -101,8 +103,6 @@ const AccountRow = memo(function AccountRow({ account, selected, members, teams,
   });
 
   const stateCode = account.state ? account.state.split(':')[1] : null;
-  const stageColor = STAGE_COLORS[account.stage];
-
   const selectCls = 'w-full rounded border-0 bg-transparent py-0 pl-0 pr-4 text-xs text-zinc-600 outline-none focus:ring-0 dark:text-zinc-400 cursor-pointer';
 
   return (
@@ -134,67 +134,59 @@ const AccountRow = memo(function AccountRow({ account, selected, members, teams,
       {/* State */}
       <td className="w-20 px-3 py-2 text-xs text-zinc-400">{stateCode ?? '—'}</td>
 
-      {/* Stage */}
-      <td className="w-28 px-3 py-2">
-        <div className="flex items-center gap-1.5">
-          <span className="h-2 w-2 flex-shrink-0 rounded-full" style={{ backgroundColor: stageColor }} />
-          <select
-            value={account.stage}
-            onChange={(e) => updateAccount(account.id, { stage: e.target.value as typeof account.stage })}
-            className={selectCls}
-          >
-            {STAGE_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
-          </select>
-        </div>
-      </td>
+      {/* Dynamic field cells */}
+      {fieldDefs.map((def, defIdx) => {
+        const rawVal = account.fields[def.id];
 
-      {/* Segment */}
-      <td className="w-28 px-3 py-2">
-        <select
-          value={account.segment}
-          onChange={(e) => updateAccount(account.id, { segment: e.target.value as typeof account.segment })}
-          className={selectCls}
-        >
-          {SEGMENT_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
-        </select>
-      </td>
+        if (def.type === 'categorical') {
+          const opts = def.options ?? [];
+          const currentVal = String(rawVal ?? opts[0] ?? '');
+          const colorIdx = opts.indexOf(currentVal);
+          const isFirst = defIdx === 0;
+          return (
+            <td key={def.id} className="w-28 px-3 py-2">
+              <div className="flex items-center gap-1.5">
+                {isFirst && (
+                  <span
+                    className="h-2 w-2 flex-shrink-0 rounded-full"
+                    style={{ backgroundColor: optionColor(colorIdx >= 0 ? colorIdx : 0) }}
+                  />
+                )}
+                <select
+                  value={currentVal}
+                  onChange={(e) => setAccountField(account.id, def.id, e.target.value)}
+                  className={selectCls}
+                >
+                  {opts.map((o) => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
+            </td>
+          );
+        }
 
-      {/* Industry */}
-      <td className="w-32 px-3 py-2">
-        <select
-          value={account.industry}
-          onChange={(e) => updateAccount(account.id, { industry: e.target.value as typeof account.industry })}
-          className={selectCls}
-        >
-          {INDUSTRY_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
-        </select>
-      </td>
+        if (def.type === 'metric') {
+          return (
+            <td key={def.id} className="w-24 px-3 py-2">
+              <MetricCell
+                accountId={account.id}
+                fieldDef={def}
+                value={Number(rawVal) || 0}
+              />
+            </td>
+          );
+        }
 
-      {/* Tier */}
-      <td className="w-24 px-3 py-2">
-        <select
-          value={account.tier}
-          onChange={(e) => updateAccount(account.id, { tier: e.target.value as typeof account.tier })}
-          className={selectCls}
-        >
-          {TIER_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
-        </select>
-      </td>
-
-      {/* ARR */}
-      <td className="w-24 px-3 py-2">
-        <NumericCell id={account.id} field="arr" value={account.arr} />
-      </td>
-
-      {/* MRR */}
-      <td className="w-24 px-3 py-2">
-        <NumericCell id={account.id} field="mrr" value={account.mrr} />
-      </td>
-
-      {/* Headcount */}
-      <td className="w-16 px-3 py-2">
-        <NumericCell id={account.id} field="headcount" value={account.headcount} />
-      </td>
+        // text
+        return (
+          <td key={def.id} className="max-w-[120px] px-3 py-2 text-xs text-zinc-500 dark:text-zinc-400">
+            <input
+              defaultValue={String(rawVal ?? '')}
+              onBlur={(e) => setAccountField(account.id, def.id, e.target.value)}
+              className="w-full bg-transparent outline-none"
+            />
+          </td>
+        );
+      })}
 
       {/* Rep */}
       <td className="w-36 px-3 py-2">
@@ -235,24 +227,25 @@ interface AccountsTableProps {
 }
 
 export default function AccountsTable({ accounts, members, teams, teamOrder, onEdit }: AccountsTableProps) {
-  const [sortField,  setSortField]  = useState<SortField | null>('name');
-  const [sortDir,    setSortDir]    = useState<'asc' | 'desc'>('asc');
-  const [selected,   setSelected]   = useState<Set<string>>(new Set());
+  const fieldDefs = useFieldDefs();
+  const [sortKey,  setSortKey]  = useState<SortKey | null>('name');
+  const [sortDir,  setSortDir]  = useState<'asc' | 'desc'>('asc');
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const { deleteAccounts } = useActions();
 
-  function handleSort(field: SortField) {
-    if (sortField === field) {
+  function handleSort(key: SortKey) {
+    if (sortKey === key) {
       setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
     } else {
-      setSortField(field);
+      setSortKey(key);
       setSortDir('asc');
     }
   }
 
   const sorted = [...accounts].sort((a, b) => {
-    if (!sortField) return 0;
-    const av = a[sortField] ?? '';
-    const bv = b[sortField] ?? '';
+    if (!sortKey) return 0;
+    const av = getAccountValue(a, sortKey);
+    const bv = getAccountValue(b, sortKey);
     if (typeof av === 'number' && typeof bv === 'number') {
       return sortDir === 'asc' ? av - bv : bv - av;
     }
@@ -264,11 +257,7 @@ export default function AccountsTable({ accounts, members, teams, teamOrder, onE
   const allSelected = sorted.length > 0 && sorted.every((a) => selected.has(a.id));
 
   function toggleAll() {
-    if (allSelected) {
-      setSelected(new Set());
-    } else {
-      setSelected(new Set(sorted.map((a) => a.id)));
-    }
+    setSelected(allSelected ? new Set() : new Set(sorted.map((a) => a.id)));
   }
 
   function toggleSelect(id: string) {
@@ -286,12 +275,15 @@ export default function AccountsTable({ accounts, members, teams, teamOrder, onE
     setSelected(new Set());
   }
 
-  const sortHeaderProps = { sortField, sortDir, onSort: handleSort };
+  const sortHeaderProps = { activeSortKey: sortKey, sortDir, onSort: handleSort };
 
-  // Summary totals for selected / visible accounts
-  const visibleAccounts = sorted;
-  const displayAccounts = selected.size > 0 ? visibleAccounts.filter((a) => selected.has(a.id)) : visibleAccounts;
-  const totalArr = displayAccounts.reduce((n, a) => n + a.arr, 0);
+  // Metric totals for status bar
+  const displayAccounts = selected.size > 0 ? sorted.filter((a) => selected.has(a.id)) : sorted;
+  const metricTotals = fieldDefs
+    .filter((f) => f.type === 'metric')
+    .map((f) => ({ def: f, total: displayAccounts.reduce((n, a) => n + (Number(a.fields[f.id]) || 0), 0) }))
+    .filter(({ total }) => total > 0)
+    .slice(0, 2);
 
   if (accounts.length === 0) {
     return (
@@ -307,7 +299,7 @@ export default function AccountsTable({ accounts, members, teams, teamOrder, onE
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       <div className="flex-1 overflow-auto">
-        <table className="w-full min-w-[1100px] border-collapse text-sm">
+        <table className="w-full border-collapse text-sm">
           <thead className="sticky top-0 z-10 bg-zinc-50 dark:bg-zinc-900">
             <tr className="border-b border-zinc-200 dark:border-zinc-700">
               <th className="w-9 px-3 py-2.5">
@@ -318,17 +310,19 @@ export default function AccountsTable({ accounts, members, teams, teamOrder, onE
                   className="h-3.5 w-3.5 rounded accent-blue-600"
                 />
               </th>
-              <SortHeader label="Name"      field="name"      {...sortHeaderProps} />
-              <SortHeader label="Country"   field="country"   {...sortHeaderProps} />
-              <SortHeader label="State"     field="state"     {...sortHeaderProps} />
-              <SortHeader label="Stage"     field="stage"     {...sortHeaderProps} />
-              <SortHeader label="Segment"   field="segment"   {...sortHeaderProps} />
-              <SortHeader label="Industry"  field="industry"  {...sortHeaderProps} />
-              <SortHeader label="Tier"      field="tier"      {...sortHeaderProps} />
-              <SortHeader label="ARR"       field="arr"       {...sortHeaderProps} right />
-              <SortHeader label="MRR"       field="mrr"       {...sortHeaderProps} right />
-              <SortHeader label="HC"        field="headcount" {...sortHeaderProps} right />
-              <SortHeader label="Rep"       field="repId"     {...sortHeaderProps} />
+              <SortHeader label="Name"    sortKey="name"    {...sortHeaderProps} />
+              <SortHeader label="Country" sortKey="country" {...sortHeaderProps} />
+              <SortHeader label="State"   sortKey="state"   {...sortHeaderProps} />
+              {fieldDefs.map((def) => (
+                <SortHeader
+                  key={def.id}
+                  label={def.label}
+                  sortKey={def.id}
+                  right={def.type === 'metric'}
+                  {...sortHeaderProps}
+                />
+              ))}
+              <SortHeader label="Rep" sortKey="repId" {...sortHeaderProps} />
               <th className="w-10" />
             </tr>
           </thead>
@@ -337,6 +331,7 @@ export default function AccountsTable({ accounts, members, teams, teamOrder, onE
               <AccountRow
                 key={account.id}
                 account={account}
+                fieldDefs={fieldDefs}
                 selected={selected.has(account.id)}
                 members={members}
                 teams={teams}
@@ -352,7 +347,14 @@ export default function AccountsTable({ accounts, members, teams, teamOrder, onE
       {/* Status bar */}
       <div className="flex items-center gap-4 border-t border-zinc-200 bg-zinc-50 px-4 py-2 text-xs text-zinc-500 dark:border-zinc-700 dark:bg-zinc-900">
         <span>{sorted.length} account{sorted.length !== 1 ? 's' : ''}</span>
-        {totalArr > 0 && <span>Total ARR: <span className="font-medium text-zinc-700 dark:text-zinc-300">{fmtCurrency(totalArr)}</span></span>}
+        {metricTotals.map(({ def, total }) => (
+          <span key={def.id}>
+            {def.label}:{' '}
+            <span className="font-medium text-zinc-700 dark:text-zinc-300">
+              {formatFieldValue(total, def)}
+            </span>
+          </span>
+        ))}
         <div className="flex-1" />
         {selected.size > 0 && (
           <div className="flex items-center gap-3">

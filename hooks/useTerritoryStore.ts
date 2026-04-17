@@ -16,8 +16,13 @@ export const useAccounts = () => useStore((s) => s.accounts);
 export const useAccountOrder = () => useStore((s) => s.accountOrder);
 export const useShowAccounts = () => useStore((s) => s.showAccounts);
 export const useMapAccountMetric = () => useStore((s) => s.mapAccountMetric);
+export const useFieldDefs = () => useStore(useShallow((s) => s.fieldDefs));
+export const useMetricFields = () =>
+  useStore(useShallow((s) => s.fieldDefs.filter((f) => f.type === 'metric')));
+export const useCategoricalFields = () =>
+  useStore(useShallow((s) => s.fieldDefs.filter((f) => f.type === 'categorical')));
 
-/** Returns aggregate stats for accounts in the given territory, or null if none. */
+/** Returns aggregate stats for accounts in the given territory entity, or null if none. */
 export const useEntityAccountStats = (entityIso: string | null) =>
   useStore((s) => {
     if (!entityIso || !s.showAccounts || s.accountOrder.length === 0) return null;
@@ -27,13 +32,15 @@ export const useEntityAccountStats = (entityIso: string | null) =>
       .filter(Boolean)
       .filter((a) => (isState ? a.state === entityIso : a.country === entityIso));
     if (accts.length === 0) return null;
-    return {
-      count:     accts.length,
-      arr:       accts.reduce((n, a) => n + a.arr, 0),
-      mrr:       accts.reduce((n, a) => n + a.mrr, 0),
-      headcount: accts.reduce((n, a) => n + a.headcount, 0),
-    };
+    const byField: Record<string, number> = {};
+    s.fieldDefs.forEach((def) => {
+      if (def.type === 'metric') {
+        byField[def.id] = accts.reduce((sum, a) => sum + (Number(a.fields[def.id]) || 0), 0);
+      }
+    });
+    return { count: accts.length, byField };
   });
+
 export const useSelectedEntityCode = () => useStore((s) => s.selectedEntityCode);
 
 export const useTeams = () => useStore((s) => s.teams);

@@ -2,9 +2,9 @@
 
 import { useRef, useState, useCallback } from 'react';
 import { useActions } from '@/hooks/useTerritoryStore';
-import { parseCSV, detectColumns, parseNumber } from '@/lib/csvParser';
+import { detectColumns, parseNumber } from '@/lib/csvParser';
+import { parseTextFile, parseExcel } from '@/lib/fileParser';
 import { resolveCountryIso2 } from '@/lib/countryNameToIso2';
-import type { Account } from '@/types/account';
 
 interface ImportAccountsModalProps {
   onClose: () => void;
@@ -51,15 +51,13 @@ export default function ImportAccountsModal({ onClose }: ImportAccountsModalProp
     setPreview(built);
   }, []);
 
-  const processFile = useCallback((text: string) => {
+  const processRows = useCallback((rows: Record<string, string>[]) => {
     setError(null);
-    const rows = parseCSV(text);
     if (rows.length === 0) { setError('No data rows found in the file.'); return; }
 
     const headers = Object.keys(rows[0]);
     const detected = detectColumns(headers);
 
-    // Try to match each of our target columns
     const resolvedMap = {
       name:    detected.name    ?? headers.find(h => COLUMN_ALIASES.name.includes(h.toLowerCase())),
       country: detected.country ?? headers.find(h => COLUMN_ALIASES.country.includes(h.toLowerCase())),
@@ -81,9 +79,35 @@ export default function ImportAccountsModal({ onClose }: ImportAccountsModalProp
 
   const handleFile = (file: File) => {
     if (!file) return;
+    setError(null);
+    const isExcel = /\.(xlsx?|ods)$/i.test(file.name);
     const reader = new FileReader();
-    reader.onload = (e) => processFile(e.target?.result as string);
-    reader.readAsText(file);
+    reader.onerror = () => setError("Couldn't read file. It may be corrupt or locked by another program.");
+    if (isExcel) {
+      reader.onload = (e) => {
+        const result = e.target?.result;
+        if (!(result instanceof ArrayBuffer)) { setError('Unexpected file format.'); return; }
+        try {
+          processRows(parseExcel(result));
+        } catch (err) {
+          console.error('[import] Excel parse failed', err);
+          setError(err instanceof Error ? `Couldn't read spreadsheet: ${err.message}` : "Couldn't read spreadsheet.");
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    } else {
+      reader.onload = (e) => {
+        const result = e.target?.result;
+        if (typeof result !== 'string') { setError('Unexpected file format.'); return; }
+        try {
+          processRows(parseTextFile(result));
+        } catch (err) {
+          console.error('[import] CSV parse failed', err);
+          setError(err instanceof Error ? `Couldn't parse file: ${err.message}` : "Couldn't parse file.");
+        }
+      };
+      reader.readAsText(file);
+    }
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -98,21 +122,20 @@ export default function ImportAccountsModal({ onClose }: ImportAccountsModalProp
     const valid = preview.filter((r) => r.valid);
     if (valid.length === 0) { setError('No valid rows to import — check that Name and Country columns are mapped correctly.'); return; }
 
-    const accounts: Omit<Account, 'id'>[] = rawRows
+    const rows = rawRows
       .map((row) => {
         const name = colMap.name ? (row[colMap.name] ?? '') : '';
         const rawCountry = colMap.country ? (row[colMap.country] ?? '') : '';
         const countryIso2 = resolveCountryIso2(rawCountry);
         if (!name || !countryIso2) return null;
         const rawState = colMap.state ? (row[colMap.state] ?? '') : '';
-        // Normalize state: if it looks like "US-CA" or "CA", store as "{countryIso2}:{rawState}"
         const state = rawState ? `${countryIso2}:${rawState.trim().toUpperCase()}` : undefined;
         const arr = colMap.arr ? parseNumber(row[colMap.arr] ?? '') : 0;
-        return { name: name.trim(), country: countryIso2, state, arr };
+        return { name: name.trim(), country: countryIso2, state, fields: { arr } };
       })
-      .filter(Boolean) as Omit<Account, 'id'>[];
+      .filter(Boolean) as Array<{ name: string; country: string; state?: string; fields: Record<string, string | number> }>;
 
-    importAccounts(accounts);
+    importAccounts(rows);
     onClose();
   };
 
@@ -149,9 +172,9 @@ export default function ImportAccountsModal({ onClose }: ImportAccountsModalProp
               <svg className="h-8 w-8 text-zinc-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
               </svg>
-              <p className="text-sm text-zinc-500">Drop a CSV or TSV file here, or <span className="text-blue-500">browse</span></p>
-              <p className="text-xs text-zinc-400">Required columns: Name, Country &nbsp;·&nbsp; Optional: State, ARR/Revenue</p>
-              <input ref={fileRef} type="file" accept=".csv,.tsv,.txt" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
+              <p className="text-sm text-zinc-500">Drop a file here, or <span className="text-blue-500">browse</span></p>
+              <p className="text-xs text-zinc-400">CSV, TSV, Excel (.xlsx, .xls) · Required: Name, Country · Optional: State, ARR</p>
+              <input ref={fileRef} type="file" accept=".csv,.tsv,.txt,.xlsx,.xls,.ods" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
             </div>
           )}
 

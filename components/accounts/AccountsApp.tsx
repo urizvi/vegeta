@@ -7,7 +7,7 @@ import AccountsToolbar from './AccountsToolbar';
 import AccountsTable from './AccountsTable';
 import AddEditAccountModal from './AddEditAccountModal';
 import AccountsImportModal from './AccountsImportModal';
-import type { AccountFilters } from './AccountsToolbar';
+import ManageFieldsModal from './ManageFieldsModal';
 import type { Account } from '@/types/account';
 
 export default function AccountsApp() {
@@ -21,11 +21,12 @@ export default function AccountsApp() {
     })),
   );
 
-  const [search,    setSearch]    = useState('');
-  const [filters,   setFilters]   = useState<AccountFilters>({});
-  const [showAdd,   setShowAdd]   = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [showImport, setShowImport] = useState(false);
+  const [search,        setSearch]        = useState('');
+  const [filters,       setFilters]       = useState<Record<string, string>>({});
+  const [showAdd,       setShowAdd]       = useState(false);
+  const [editingId,     setEditingId]     = useState<string | null>(null);
+  const [showImport,    setShowImport]    = useState(false);
+  const [showManage,    setShowManage]    = useState(false);
 
   const filtered = useMemo(() => {
     return accountOrder
@@ -33,10 +34,9 @@ export default function AccountsApp() {
       .filter(Boolean)
       .filter((a): a is Account => {
         if (search && !a.name.toLowerCase().includes(search.toLowerCase())) return false;
-        if (filters.stage    && a.stage    !== filters.stage)    return false;
-        if (filters.segment  && a.segment  !== filters.segment)  return false;
-        if (filters.industry && a.industry !== filters.industry) return false;
-        if (filters.tier     && a.tier     !== filters.tier)     return false;
+        for (const [fieldId, val] of Object.entries(filters)) {
+          if (val && a.fields[fieldId] !== val) return false;
+        }
         return true;
       });
   }, [accountOrder, accounts, search, filters]);
@@ -51,8 +51,10 @@ export default function AccountsApp() {
         totalCount={filtered.length}
         onSearch={setSearch}
         onFilter={(patch) => setFilters((f) => ({ ...f, ...patch }))}
+        onClearFilters={() => setFilters({})}
         onAdd={() => setShowAdd(true)}
         onImport={() => setShowImport(true)}
+        onManageFields={() => setShowManage(true)}
       />
 
       <main className="flex flex-1 flex-col overflow-hidden">
@@ -73,6 +75,9 @@ export default function AccountsApp() {
       )}
       {showImport && (
         <AccountsImportModal onClose={() => setShowImport(false)} />
+      )}
+      {showManage && (
+        <ManageFieldsModal onClose={() => setShowManage(false)} />
       )}
     </div>
   );

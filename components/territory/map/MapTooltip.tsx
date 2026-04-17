@@ -2,27 +2,33 @@
 
 import {
   useHoveredEntityCode, useHoveredEntityIso, useMapTheme,
-  useEntityAccountStats, useMapAccountMetric, useTerritoryStore,
+  useEntityAccountStats, useMapAccountMetric, useTerritoryStore, useFieldDefs,
 } from '@/hooks/useTerritoryStore';
-import { formatMetric } from '@/lib/accountFields';
+import { formatFieldValue } from '@/lib/accountFields';
 
 interface MapTooltipProps {
   mousePos: { x: number; y: number };
 }
 
 export default function MapTooltip({ mousePos }: MapTooltipProps) {
-  const hoveredCode   = useHoveredEntityCode();
-  const hoveredIso    = useHoveredEntityIso();
-  const theme         = useMapTheme();
-  const metric        = useMapAccountMetric();
-  const assignedTeam  = useTerritoryStore((s) => {
+  const hoveredCode  = useHoveredEntityCode();
+  const hoveredIso   = useHoveredEntityIso();
+  const theme        = useMapTheme();
+  const metric       = useMapAccountMetric();
+  const fieldDefs    = useFieldDefs();
+  const assignedTeam = useTerritoryStore((s) => {
     if (!hoveredCode) return null;
     const a = s.assignments[hoveredCode];
     return a ? (s.teams[a.teamId] ?? null) : null;
   });
-  const accountStats  = useEntityAccountStats(hoveredIso);
+  const accountStats = useEntityAccountStats(hoveredIso);
 
   if (!hoveredCode) return null;
+
+  const metricFieldDef = fieldDefs.find((f) => f.id === metric);
+  const metricVal = metric !== 'count' && accountStats
+    ? accountStats.byField[metric]
+    : undefined;
 
   return (
     <div
@@ -41,10 +47,19 @@ export default function MapTooltip({ mousePos }: MapTooltipProps) {
       {accountStats && (
         <div className="mt-1 border-t border-white/20 pt-1 text-xs opacity-80">
           {accountStats.count} account{accountStats.count !== 1 ? 's' : ''}
-          {metric !== 'count' && accountStats[metric] > 0 ? (
-            <span className="ml-1 opacity-75">· {formatMetric(metric, accountStats[metric])}</span>
-          ) : accountStats.arr > 0 ? (
-            <span className="ml-1 opacity-75">· {formatMetric('arr', accountStats.arr)}</span>
+          {metricVal !== undefined && metricVal > 0 && metricFieldDef ? (
+            <span className="ml-1 opacity-75">
+              · {formatFieldValue(metricVal, metricFieldDef)}
+            </span>
+          ) : accountStats.byField && Object.values(accountStats.byField)[0] > 0 ? (
+            (() => {
+              const firstMetric = fieldDefs.find((f) => f.type === 'metric' && (accountStats.byField[f.id] ?? 0) > 0);
+              return firstMetric ? (
+                <span className="ml-1 opacity-75">
+                  · {formatFieldValue(accountStats.byField[firstMetric.id], firstMetric)}
+                </span>
+              ) : null;
+            })()
           ) : null}
         </div>
       )}
