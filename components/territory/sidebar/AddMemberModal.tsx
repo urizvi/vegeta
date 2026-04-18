@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, useId } from 'react';
 import { useActions } from '@/hooks/useTerritoryStore';
 import type { HierarchyLevel } from '@/types/territory';
 
@@ -13,6 +13,7 @@ interface AddMemberModalProps {
 
 export default function AddMemberModal({ teamId, onClose }: AddMemberModalProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const uid = useId();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [role, setRole] = useState('');
@@ -31,14 +32,16 @@ export default function AddMemberModal({ teamId, onClose }: AddMemberModalProps)
   return (
     <dialog
       ref={dialogRef}
+      aria-labelledby="add-member-title"
       className="m-auto w-full max-w-sm rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl backdrop:bg-black/30 dark:border-zinc-700 dark:bg-zinc-900"
       onClose={onClose}
     >
-      <h2 className="mb-4 text-lg font-semibold text-zinc-800 dark:text-zinc-100">Add Member</h2>
+      <h2 id="add-member-title" className="mb-4 text-lg font-semibold text-zinc-800 dark:text-zinc-100">Add Member</h2>
       <form onSubmit={handleSubmit} className="flex flex-col gap-3">
         <div>
-          <label className="mb-1 block text-xs font-medium text-zinc-500">Full Name *</label>
+          <label htmlFor={`${uid}-name`} className="mb-1 block text-xs font-medium text-zinc-500">Full Name *</label>
           <input
+            id={`${uid}-name`}
             autoFocus
             required
             value={name}
@@ -48,8 +51,9 @@ export default function AddMemberModal({ teamId, onClose }: AddMemberModalProps)
           />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-zinc-500">Email *</label>
+          <label htmlFor={`${uid}-email`} className="mb-1 block text-xs font-medium text-zinc-500">Email *</label>
           <input
+            id={`${uid}-email`}
             required
             type="email"
             value={email}
@@ -59,8 +63,9 @@ export default function AddMemberModal({ teamId, onClose }: AddMemberModalProps)
           />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-zinc-500">Role / Title</label>
+          <label htmlFor={`${uid}-role`} className="mb-1 block text-xs font-medium text-zinc-500">Role / Title</label>
           <input
+            id={`${uid}-role`}
             value={role}
             onChange={(e) => setRole(e.target.value)}
             placeholder="Account Executive"
@@ -68,8 +73,9 @@ export default function AddMemberModal({ teamId, onClose }: AddMemberModalProps)
           />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-zinc-500">Level</label>
+          <label htmlFor={`${uid}-level`} className="mb-1 block text-xs font-medium text-zinc-500">Level</label>
           <select
+            id={`${uid}-level`}
             value={level}
             onChange={(e) => setLevel(e.target.value as HierarchyLevel)}
             className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-blue-400 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"

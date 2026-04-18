@@ -28,15 +28,20 @@ function SortHeader({ label, sortKey, activeSortKey, sortDir, onSort, right }: {
   const active = activeSortKey === sortKey;
   return (
     <th
-      onClick={() => onSort(sortKey)}
-      className={`cursor-pointer select-none whitespace-nowrap px-3 py-2.5 text-xs font-semibold text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 ${right ? 'text-right' : 'text-left'}`}
+      scope="col"
+      aria-sort={active ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+      className={`whitespace-nowrap px-3 py-2.5 text-xs font-semibold text-zinc-500 ${right ? 'text-right' : 'text-left'}`}
     >
-      <span className={`inline-flex items-center gap-1 ${right ? 'justify-end' : ''}`}>
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        className={`inline-flex w-full cursor-pointer select-none items-center gap-1 rounded hover:text-zinc-700 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:hover:text-zinc-300 ${right ? 'justify-end' : ''}`}
+      >
         {label}
-        <span className={active ? 'text-zinc-500' : 'text-zinc-300 dark:text-zinc-600'}>
+        <span className={active ? 'text-zinc-500' : 'text-zinc-300 dark:text-zinc-600'} aria-hidden="true">
           {active ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}
         </span>
-      </span>
+      </button>
     </th>
   );
 }

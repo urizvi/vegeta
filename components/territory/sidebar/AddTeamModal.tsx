@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, useId } from 'react';
 import { useActions } from '@/hooks/useTerritoryStore';
 import { getTeamColor } from '@/lib/colorUtils';
 import { useTeamOrder } from '@/hooks/useTerritoryStore';
@@ -11,6 +11,7 @@ interface AddTeamModalProps {
 
 export default function AddTeamModal({ onClose }: AddTeamModalProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const uid = useId();
   const [name, setName] = useState('');
   const teamCount = useTeamOrder().length;
   const [color, setColor] = useState(() => getTeamColor(teamCount));
@@ -28,16 +29,18 @@ export default function AddTeamModal({ onClose }: AddTeamModalProps) {
   return (
     <dialog
       ref={dialogRef}
+      aria-labelledby="add-team-title"
       className="m-auto w-full max-w-sm rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl backdrop:bg-black/30 dark:border-zinc-700 dark:bg-zinc-900"
       onClose={onClose}
     >
-      <h2 className="mb-4 text-lg font-semibold text-zinc-800 dark:text-zinc-100">Add Team</h2>
+      <h2 id="add-team-title" className="mb-4 text-lg font-semibold text-zinc-800 dark:text-zinc-100">Add Team</h2>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <div>
-          <label className="mb-1 block text-sm font-medium text-zinc-600 dark:text-zinc-400">
+          <label htmlFor={`${uid}-name`} className="mb-1 block text-sm font-medium text-zinc-600 dark:text-zinc-400">
             Team Name
           </label>
           <input
+            id={`${uid}-name`}
             autoFocus
             required
             value={name}
@@ -47,8 +50,9 @@ export default function AddTeamModal({ onClose }: AddTeamModalProps) {
           />
         </div>
         <div className="flex items-center gap-3">
-          <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400">Color</label>
+          <label htmlFor={`${uid}-color`} className="text-sm font-medium text-zinc-600 dark:text-zinc-400">Color</label>
           <input
+            id={`${uid}-color`}
             type="color"
             value={color}
             onChange={(e) => setColor(e.target.value)}

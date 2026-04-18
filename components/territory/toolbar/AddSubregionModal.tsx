@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useEffect, useState, useMemo } from 'react';
+import { useRef, useEffect, useState, useMemo, useId } from 'react';
 import { useActions, useTeams, useTeamOrder } from '@/hooks/useTerritoryStore';
 import { useRegionStates } from '@/hooks/useRegionStates';
 import type { Region } from '@/types/territory';
@@ -12,6 +12,7 @@ interface AddSubregionModalProps {
 
 export default function AddSubregionModal({ parentRegion, onClose }: AddSubregionModalProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const uid = useId();
   const [name, setName] = useState('');
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -94,10 +95,11 @@ export default function AddSubregionModal({ parentRegion, onClose }: AddSubregio
   return (
     <dialog
       ref={dialogRef}
+      aria-labelledby="add-subregion-title"
       className="m-auto w-full max-w-lg rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl backdrop:bg-black/30 dark:border-zinc-700 dark:bg-zinc-900"
       onClose={onClose}
     >
-      <h2 className="mb-0.5 text-lg font-semibold text-zinc-800 dark:text-zinc-100">
+      <h2 id="add-subregion-title" className="mb-0.5 text-lg font-semibold text-zinc-800 dark:text-zinc-100">
         New Subregion
       </h2>
       <p className="mb-4 text-sm text-zinc-400">Within {parentRegion.name}</p>
@@ -105,10 +107,11 @@ export default function AddSubregionModal({ parentRegion, onClose }: AddSubregio
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         {/* Name */}
         <div>
-          <label className="mb-1 block text-sm font-medium text-zinc-600 dark:text-zinc-400">
+          <label htmlFor={`${uid}-name`} className="mb-1 block text-sm font-medium text-zinc-600 dark:text-zinc-400">
             Subregion Name
           </label>
           <input
+            id={`${uid}-name`}
             autoFocus
             required
             value={name}
@@ -120,10 +123,11 @@ export default function AddSubregionModal({ parentRegion, onClose }: AddSubregio
 
         {/* Assign to team */}
         <div>
-          <label className="mb-1 block text-sm font-medium text-zinc-600 dark:text-zinc-400">
+          <label htmlFor={`${uid}-team`} className="mb-1 block text-sm font-medium text-zinc-600 dark:text-zinc-400">
             Assign to Team <span className="font-normal text-zinc-400">(optional)</span>
           </label>
           <select
+            id={`${uid}-team`}
             value={teamId}
             onChange={(e) => setTeamId(e.target.value)}
             className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
@@ -160,6 +164,7 @@ export default function AddSubregionModal({ parentRegion, onClose }: AddSubregio
           </div>
 
           <input
+            aria-label="Search states or provinces"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search states / provinces…"

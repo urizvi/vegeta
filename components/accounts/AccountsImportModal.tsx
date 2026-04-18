@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState, useCallback, useMemo } from 'react';
+import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import { useActions, useMembers, useFieldDefs, useTerritoryStore } from '@/hooks/useTerritoryStore';
 import { parseTextFile, parseExcel, reconcileColumns } from '@/lib/fileParser';
 import { detectColumn, parseNumber } from '@/lib/csvParser';
@@ -193,6 +193,8 @@ export default function AccountsImportModal({ onClose }: Props) {
   const members   = useMembers();
   const fieldDefs = useFieldDefs();
   const fileRef   = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  useEffect(() => { dialogRef.current?.showModal(); }, []);
 
   type Step = 'upload' | 'reconcile' | 'map';
   const [step,       setStep]       = useState<Step>('upload');
@@ -433,12 +435,16 @@ export default function AccountsImportModal({ onClose }: Props) {
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-      <div className="w-full max-w-2xl rounded-2xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-700 dark:bg-zinc-900">
+    <dialog
+      ref={dialogRef}
+      onClose={onClose}
+      aria-labelledby="accounts-import-title"
+      className="m-auto w-full max-w-2xl rounded-2xl border border-zinc-200 bg-white p-0 shadow-2xl backdrop:bg-black/40 backdrop:backdrop-blur-sm dark:border-zinc-700 dark:bg-zinc-900"
+    >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-4 dark:border-zinc-700">
           <div>
-            <h2 className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">Import Accounts</h2>
+            <h2 id="accounts-import-title" className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">Import Accounts</h2>
             <div className="mt-1 flex items-center gap-1.5">
               {(['upload', 'reconcile', 'map'] as const).map((s, i) => (
                 <span key={s} className="flex items-center gap-1.5">
@@ -450,8 +456,8 @@ export default function AccountsImportModal({ onClose }: Props) {
               ))}
             </div>
           </div>
-          <button onClick={onClose} className="flex h-6 w-6 items-center justify-center rounded text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800">
-            <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="currentColor">
+          <button type="button" aria-label="Close" onClick={onClose} className="flex h-6 w-6 items-center justify-center rounded text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800">
+            <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
               <path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z" />
             </svg>
           </button>
@@ -462,11 +468,15 @@ export default function AccountsImportModal({ onClose }: Props) {
           {/* ── Step 1: Upload ─────────────────────────────────────────── */}
           {step === 'upload' && (
             <div
+              role="button"
+              tabIndex={0}
+              aria-label="Upload a file — click to browse or drop a file here"
               onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
               onDragLeave={() => setDragging(false)}
               onDrop={(e) => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) handleFile(f); }}
               onClick={() => fileRef.current?.click()}
-              className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed py-10 transition-colors ${
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileRef.current?.click(); } }}
+              className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed py-10 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-400 ${
                 dragging ? 'border-blue-400 bg-blue-50 dark:bg-blue-950/20' : 'border-zinc-200 hover:border-zinc-300 dark:border-zinc-700'
               }`}
             >
@@ -605,7 +615,6 @@ export default function AccountsImportModal({ onClose }: Props) {
             </button>
           </div>
         )}
-      </div>
-    </div>
+    </dialog>
   );
 }

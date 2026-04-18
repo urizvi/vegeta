@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useEffect, useState, useMemo } from 'react';
+import { useRef, useEffect, useState, useMemo, useId } from 'react';
 import { useActions, useTeams, useTeamOrder, useMembers, useFieldDefs } from '@/hooks/useTerritoryStore';
 import { useGeoData } from '@/hooks/useGeoData';
 import { useCountryStates } from '@/hooks/useCountryStates';
@@ -21,6 +21,7 @@ interface Props {
 
 export default function AddEditAccountModal({ account, onClose }: Props) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const uid = useId();
   const fieldDefs = useFieldDefs();
   const { addAccount, updateAccount } = useActions();
   const teams     = useTeams();
@@ -105,16 +106,17 @@ export default function AddEditAccountModal({ account, onClose }: Props) {
   return (
     <dialog
       ref={dialogRef}
+      aria-labelledby="add-edit-account-title"
       className="m-auto w-full max-w-xl rounded-2xl border border-zinc-200 bg-white p-0 shadow-2xl backdrop:bg-black/30 dark:border-zinc-700 dark:bg-zinc-900"
       onClose={onClose}
     >
       {/* Header */}
       <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-4 dark:border-zinc-700">
-        <h2 className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">
+        <h2 id="add-edit-account-title" className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">
           {account ? 'Edit Account' : 'Add Account'}
         </h2>
-        <button onClick={onClose} className="flex h-6 w-6 items-center justify-center rounded text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800">
-          <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="currentColor">
+        <button type="button" aria-label="Close" onClick={onClose} className="flex h-6 w-6 items-center justify-center rounded text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800">
+          <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
             <path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z" />
           </svg>
         </button>
@@ -125,8 +127,9 @@ export default function AddEditAccountModal({ account, onClose }: Props) {
 
           {/* Name */}
           <div>
-            <label className={labelCls}>Account Name *</label>
+            <label htmlFor={`${uid}-name`} className={labelCls}>Account Name *</label>
             <input
+              id={`${uid}-name`}
               autoFocus
               required
               value={form.name}
@@ -139,8 +142,9 @@ export default function AddEditAccountModal({ account, onClose }: Props) {
           {/* Location */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={labelCls}>Country *</label>
+              <label htmlFor={`${uid}-country`} className={labelCls}>Country *</label>
               <select
+                id={`${uid}-country`}
                 required
                 value={form.country}
                 onChange={(e) => handleCountryChange(e.target.value)}
@@ -153,21 +157,22 @@ export default function AddEditAccountModal({ account, onClose }: Props) {
               </select>
             </div>
             <div>
-              <label className={labelCls}>State / Province</label>
+              <label htmlFor={`${uid}-state`} className={labelCls}>State / Province</label>
               {!form.country ? (
-                <select disabled className={`${selectCls} opacity-50`}>
+                <select id={`${uid}-state`} disabled className={`${selectCls} opacity-50`}>
                   <option>Select country first</option>
                 </select>
               ) : statesLoading ? (
-                <select disabled className={`${selectCls} opacity-50`}>
+                <select id={`${uid}-state`} disabled className={`${selectCls} opacity-50`}>
                   <option>Loading…</option>
                 </select>
               ) : stateOptions.length === 0 ? (
-                <select disabled className={`${selectCls} opacity-50`}>
+                <select id={`${uid}-state`} disabled className={`${selectCls} opacity-50`}>
                   <option>No state data</option>
                 </select>
               ) : (
                 <select
+                  id={`${uid}-state`}
                   value={currentStateId}
                   onChange={(e) => handleStateChange(e.target.value)}
                   className={selectCls}
@@ -188,8 +193,9 @@ export default function AddEditAccountModal({ account, onClose }: Props) {
               <div className="grid grid-cols-2 gap-3">
                 {categoricalFields.map((def) => (
                   <div key={def.id}>
-                    <label className={labelCls}>{def.label}</label>
+                    <label htmlFor={`${uid}-f-${def.id}`} className={labelCls}>{def.label}</label>
                     <select
+                      id={`${uid}-f-${def.id}`}
                       value={String(form.fields[def.id] ?? def.options?.[0] ?? '')}
                       onChange={(e) => setField(def.id, e.target.value)}
                       className={selectCls}
@@ -209,10 +215,11 @@ export default function AddEditAccountModal({ account, onClose }: Props) {
               <div className="grid grid-cols-3 gap-3">
                 {metricFields.map((def) => (
                   <div key={def.id}>
-                    <label className={labelCls}>
+                    <label htmlFor={`${uid}-f-${def.id}`} className={labelCls}>
                       {def.label}{def.isCurrency ? ' ($)' : ''}
                     </label>
                     <input
+                      id={`${uid}-f-${def.id}`}
                       type="number"
                       min={0}
                       step={def.isCurrency ? 'any' : '1'}
@@ -234,8 +241,9 @@ export default function AddEditAccountModal({ account, onClose }: Props) {
               <div className="space-y-3">
                 {textFields.map((def) => (
                   <div key={def.id}>
-                    <label className={labelCls}>{def.label}</label>
+                    <label htmlFor={`${uid}-f-${def.id}`} className={labelCls}>{def.label}</label>
                     <input
+                      id={`${uid}-f-${def.id}`}
                       type="text"
                       value={String(form.fields[def.id] ?? '')}
                       onChange={(e) => setField(def.id, e.target.value)}
@@ -249,8 +257,9 @@ export default function AddEditAccountModal({ account, onClose }: Props) {
 
           {/* Assignment */}
           <div>
-            <label className={labelCls}>Sales Rep</label>
+            <label htmlFor={`${uid}-rep`} className={labelCls}>Sales Rep</label>
             <select
+              id={`${uid}-rep`}
               value={form.repId ?? ''}
               onChange={(e) => setForm((f) => ({ ...f, repId: e.target.value || null }))}
               className={selectCls}

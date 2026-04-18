@@ -10,6 +10,10 @@ const FieldRow = memo(function FieldRow({
   def,
   isDragging,
   isDropTarget,
+  canMoveUp,
+  canMoveDown,
+  onMoveUp,
+  onMoveDown,
   onDragStart,
   onDragOver,
   onDragLeave,
@@ -19,6 +23,10 @@ const FieldRow = memo(function FieldRow({
   def: FieldDefinition;
   isDragging: boolean;
   isDropTarget: boolean;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
   onDragStart: () => void;
   onDragOver: (e: React.DragEvent) => void;
   onDragLeave: () => void;
@@ -26,7 +34,21 @@ const FieldRow = memo(function FieldRow({
   onDragEnd: () => void;
 }) {
   const [optInput, setOptInput] = useState('');
+  const [label, setLabel] = useState(def.label);
+  const [lastSeenLabel, setLastSeenLabel] = useState(def.label);
   const { updateFieldDef, removeFieldDef } = useActions();
+
+  // Re-seed local edit state if the store-side label changes externally.
+  if (def.label !== lastSeenLabel) {
+    setLastSeenLabel(def.label);
+    setLabel(def.label);
+  }
+
+  function commitLabel() {
+    const v = label.trim();
+    if (!v) { setLabel(def.label); return; }
+    if (v !== def.label) updateFieldDef(def.id, { label: v });
+  }
 
   function addOption() {
     const val = optInput.trim();
@@ -62,20 +84,42 @@ const FieldRow = memo(function FieldRow({
       }`}
     >
       <div className="flex items-center gap-2">
-        {/* Drag handle */}
-        <span className="cursor-grab select-none text-zinc-300 dark:text-zinc-600 active:cursor-grabbing">
+        {/* Drag handle (visual) + keyboard reorder buttons */}
+        <span aria-hidden="true" className="cursor-grab select-none text-zinc-300 dark:text-zinc-600 active:cursor-grabbing">
           <svg className="h-4 w-4" viewBox="0 0 16 16" fill="currentColor">
             <path d="M5 3a1 1 0 110 2 1 1 0 010-2zm6 0a1 1 0 110 2 1 1 0 010-2zM5 7a1 1 0 110 2 1 1 0 010-2zm6 0a1 1 0 110 2 1 1 0 010-2zm-6 4a1 1 0 110 2 1 1 0 010-2zm6 0a1 1 0 110 2 1 1 0 010-2z" />
           </svg>
         </span>
+        <div className="flex shrink-0 flex-col">
+          <button
+            type="button"
+            onClick={onMoveUp}
+            disabled={!canMoveUp}
+            aria-label={`Move ${def.label} up`}
+            className="flex h-3 w-4 items-center justify-center rounded text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 disabled:cursor-not-allowed disabled:opacity-30 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+          >
+            <svg className="h-2.5 w-2.5" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true"><path d="M5 2l4 5H1z" /></svg>
+          </button>
+          <button
+            type="button"
+            onClick={onMoveDown}
+            disabled={!canMoveDown}
+            aria-label={`Move ${def.label} down`}
+            className="flex h-3 w-4 items-center justify-center rounded text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 disabled:cursor-not-allowed disabled:opacity-30 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+          >
+            <svg className="h-2.5 w-2.5" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true"><path d="M5 8L1 3h8z" /></svg>
+          </button>
+        </div>
 
         {/* Label */}
         <input
-          key={def.id}
-          defaultValue={def.label}
-          onBlur={(e) => {
-            const v = e.target.value.trim();
-            if (v && v !== def.label) updateFieldDef(def.id, { label: v });
+          aria-label="Field label"
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+          onBlur={commitLabel}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); }
+            else if (e.key === 'Escape') { setLabel(def.label); e.currentTarget.blur(); }
           }}
           className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1.5 py-0.5 text-sm font-medium text-zinc-800 outline-none focus:border-zinc-200 focus:bg-zinc-50 dark:text-zinc-100 dark:focus:border-zinc-700 dark:focus:bg-zinc-800"
         />
@@ -271,6 +315,16 @@ export default function ManageFieldsModal({ onClose }: Props) {
     reorderFieldDefs(next);
   }
 
+  function moveBy(id: string, delta: -1 | 1) {
+    const ids = fieldDefs.map((f) => f.id);
+    const from = ids.indexOf(id);
+    const to = from + delta;
+    if (from < 0 || to < 0 || to >= ids.length) return;
+    const next = [...ids];
+    [next[from], next[to]] = [next[to], next[from]];
+    reorderFieldDefs(next);
+  }
+
   function handleDragEnd() {
     setDraggingId(null);
     setDropTargetId(null);
@@ -279,20 +333,23 @@ export default function ManageFieldsModal({ onClose }: Props) {
   return (
     <dialog
       ref={dialogRef}
+      aria-labelledby="manage-fields-title"
       className="m-auto w-full max-w-xl rounded-2xl border border-zinc-200 bg-white p-0 shadow-2xl backdrop:bg-black/30 dark:border-zinc-700 dark:bg-zinc-900"
       onClose={onClose}
     >
       {/* Header */}
       <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-4 dark:border-zinc-700">
         <div>
-          <h2 className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">Manage Fields</h2>
+          <h2 id="manage-fields-title" className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">Manage Fields</h2>
           <p className="mt-0.5 text-xs text-zinc-400">Define the fields available on every account.</p>
         </div>
         <button
+          type="button"
+          aria-label="Close"
           onClick={onClose}
           className="flex h-6 w-6 items-center justify-center rounded text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
         >
-          <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="currentColor">
+          <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
             <path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z" />
           </svg>
         </button>
@@ -302,12 +359,16 @@ export default function ManageFieldsModal({ onClose }: Props) {
         {fieldDefs.length === 0 && (
           <p className="py-4 text-center text-sm text-zinc-400">No fields yet. Add one below.</p>
         )}
-        {fieldDefs.map((def) => (
+        {fieldDefs.map((def, idx) => (
           <FieldRow
             key={def.id}
             def={def}
             isDragging={draggingId === def.id}
             isDropTarget={dropTargetId === def.id && draggingId !== def.id}
+            canMoveUp={idx > 0}
+            canMoveDown={idx < fieldDefs.length - 1}
+            onMoveUp={() => moveBy(def.id, -1)}
+            onMoveDown={() => moveBy(def.id, 1)}
             onDragStart={() => setDraggingId(def.id)}
             onDragOver={() => setDropTargetId(def.id)}
             onDragLeave={() => { if (dropTargetId === def.id) setDropTargetId(null); }}

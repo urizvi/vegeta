@@ -65,7 +65,7 @@ const CountryBubble = memo(function CountryBubble({
   );
 });
 
-export function WorldAccountLayer({ zoom }: WorldAccountLayerProps) {
+export const WorldAccountLayer = memo(function WorldAccountLayer({ zoom }: WorldAccountLayerProps) {
   const accounts  = useAccounts();
   const order     = useAccountOrder();
   const show      = useShowAccounts();
@@ -120,7 +120,7 @@ export function WorldAccountLayer({ zoom }: WorldAccountLayerProps) {
       })}
     </>
   );
-}
+});
 
 // ── Drill-down — individual dot per account at state centroid ─────────────────
 
@@ -155,7 +155,7 @@ const StateDot = memo(function StateDot({
   );
 });
 
-export function DrillDownAccountLayer({ countryIso2, features, zoom }: DrillDownAccountLayerProps) {
+export const DrillDownAccountLayer = memo(function DrillDownAccountLayer({ countryIso2, features, zoom }: DrillDownAccountLayerProps) {
   const accounts = useAccounts();
   const order    = useAccountOrder();
   const show     = useShowAccounts();
@@ -193,4 +193,4 @@ export function DrillDownAccountLayer({ countryIso2, features, zoom }: DrillDown
       })}
     </>
   );
-}
+});

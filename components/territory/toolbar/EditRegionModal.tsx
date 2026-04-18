@@ -54,10 +54,11 @@ export default function EditRegionModal({ region, onClose }: EditRegionModalProp
   return (
     <dialog
       ref={dialogRef}
+      aria-labelledby="edit-region-title"
       className="m-auto w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl backdrop:bg-black/30 dark:border-zinc-700 dark:bg-zinc-900"
       onClose={onClose}
     >
-      <h2 className="mb-0.5 text-lg font-semibold text-zinc-800 dark:text-zinc-100">
+      <h2 id="edit-region-title" className="mb-0.5 text-lg font-semibold text-zinc-800 dark:text-zinc-100">
         Edit Countries
       </h2>
       <p className="mb-4 text-sm text-zinc-400">
@@ -67,6 +68,7 @@ export default function EditRegionModal({ region, onClose }: EditRegionModalProp
       <form onSubmit={handleSave} className="flex flex-col gap-3">
         <input
           autoFocus
+          aria-label="Search countries"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search countries…"
