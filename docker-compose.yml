@@ -1,0 +1,47 @@
+services:
+  directus-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: directus
+      POSTGRES_USER: directus
+      POSTGRES_PASSWORD: directus
+    volumes:
+      - directus-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U directus -d directus']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  directus:
+    image: directus/directus:11.3.5
+    restart: unless-stopped
+    ports:
+      - '8055:8055'
+    depends_on:
+      directus-db:
+        condition: service_healthy
+    environment:
+      KEY: 'vegeta-local-key-change-in-prod'
+      SECRET: 'vegeta-local-secret-change-in-prod'
+      ADMIN_EMAIL: admin@vegeta.local
+      ADMIN_PASSWORD: admin
+      DB_CLIENT: pg
+      DB_HOST: directus-db
+      DB_PORT: '5432'
+      DB_DATABASE: directus
+      DB_USER: directus
+      DB_PASSWORD: directus
+      WEBSOCKETS_ENABLED: 'true'
+      CORS_ENABLED: 'true'
+      CORS_ORIGIN: 'http://localhost:3000'
+      PUBLIC_URL: 'http://localhost:8055'
+    volumes:
+      - directus-uploads:/directus/uploads
+      - directus-extensions:/directus/extensions
+
+volumes:
+  directus-db-data:
+  directus-uploads:
+  directus-extensions:

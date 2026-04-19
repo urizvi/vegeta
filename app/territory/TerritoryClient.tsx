@@ -1,6 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
+import DirectusHydrationBoundary from '@/components/DirectusHydrationBoundary';
 
 // Skip SSR entirely — TerritoryApp uses Zustand (useSyncExternalStore) which
 // triggers "getServerSnapshot should be cached" during pre-rendering.
@@ -10,5 +11,9 @@ const TerritoryApp = dynamic(
 );
 
 export default function TerritoryClient() {
-  return <TerritoryApp />;
+  return (
+    <DirectusHydrationBoundary>
+      <TerritoryApp />
+    </DirectusHydrationBoundary>
+  );
 }

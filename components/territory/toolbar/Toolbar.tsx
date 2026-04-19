@@ -1,14 +1,12 @@
 'use client';
 
-import { useState } from 'react';
-import Link from 'next/link';
 import {
   useActiveView, useDrillDownCountryCode, useMapTheme, useAccountOrder,
   useShowAccounts, useMapAccountMetric, useActions, useMetricFields,
 } from '@/hooks/useTerritoryStore';
+import { DIRECTUS_ADMIN_URL } from '@/lib/directus';
 import { MAP_THEMES } from '@/lib/mapThemes';
 import type { MapThemeId } from '@/lib/mapThemes';
-import ImportAccountsModal from './ImportAccountsModal';
 
 interface ToolbarProps {
   drillDownCountryName: string | null;
@@ -26,14 +24,14 @@ export default function Toolbar({ drillDownCountryName }: ToolbarProps) {
   const metricFields  = useMetricFields();
   const {
     setActiveView, setDrillDownCountryCode, setMapTheme,
-    toggleShowAccounts, clearAccounts, setMapAccountMetric,
+    toggleShowAccounts, setMapAccountMetric,
   } = useActions();
-  const [showImport, setShowImport] = useState(false);
+
+  const manageAccountsUrl = `${DIRECTUS_ADMIN_URL}/content/accounts`;
 
   return (
-    <>
     <header className="flex items-center gap-3 border-b border-zinc-200 bg-white px-4 py-2.5 dark:border-zinc-700 dark:bg-zinc-950">
-      {/* Logo + page nav */}
+      {/* Logo + deep-link to admin */}
       <span className="text-sm font-bold text-zinc-800 dark:text-zinc-100">
         Sales Deployment
       </span>
@@ -41,12 +39,18 @@ export default function Toolbar({ drillDownCountryName }: ToolbarProps) {
         <span className="rounded-md bg-zinc-900 px-2.5 py-1 font-medium text-white dark:bg-zinc-100 dark:text-zinc-900">
           Territory
         </span>
-        <Link
-          href="/accounts"
-          className="rounded-md px-2.5 py-1 font-medium text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+        <a
+          href={manageAccountsUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1 rounded-md px-2.5 py-1 font-medium text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+          title="Manage accounts in Directus (opens new tab)"
         >
-          Accounts
-        </Link>
+          Manage Accounts
+          <svg className="h-2.5 w-2.5" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true">
+            <path d="M3 0v1h4.293L0 8.293 1.707 10 9 2.707V7h1V0H3z" />
+          </svg>
+        </a>
       </div>
 
       {/* Breadcrumb */}
@@ -98,66 +102,53 @@ export default function Toolbar({ drillDownCountryName }: ToolbarProps) {
         })}
       </div>
 
-      {/* Accounts controls */}
-      <div className="flex items-center gap-1">
-        <button
-          onClick={() => setShowImport(true)}
-          className="flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-600 shadow-sm hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
-          title="Import account data"
-        >
-          <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="currentColor">
-            <path d="M8 8a3 3 0 100-6 3 3 0 000 6zM14 14s1 0 1-1-1-4-7-4-7 3-7 4 1 1 1 1h12z" />
-          </svg>
-          Accounts
-          {accountOrder.length > 0 && (
+      {/* Account display controls (read-only UI state) */}
+      {accountOrder.length > 0 && (
+        <div className="flex items-center gap-1">
+          <span
+            className="flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+            title="Accounts loaded from Directus"
+          >
+            <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+              <path d="M8 8a3 3 0 100-6 3 3 0 000 6zM14 14s1 0 1-1-1-4-7-4-7 3-7 4 1 1 1 1h12z" />
+            </svg>
+            Accounts
             <span className="rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700 dark:bg-blue-900 dark:text-blue-300">
               {accountOrder.length}
             </span>
+          </span>
+          <button
+            onClick={toggleShowAccounts}
+            title={showAccounts ? 'Hide accounts on map' : 'Show accounts on map'}
+            className={`flex h-7 w-7 items-center justify-center rounded-lg border transition-colors ${
+              showAccounts
+                ? 'border-blue-300 bg-blue-50 text-blue-600 dark:border-blue-700 dark:bg-blue-950 dark:text-blue-400'
+                : 'border-zinc-200 bg-white text-zinc-400 dark:border-zinc-700 dark:bg-zinc-800'
+            }`}
+          >
+            <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="currentColor">
+              {showAccounts
+                ? <path d="M8 2a6 6 0 100 12A6 6 0 008 2zm0 2a4 4 0 110 8A4 4 0 018 4zm0 1.5a2.5 2.5 0 100 5 2.5 2.5 0 000-5z" />
+                : <path d="M.5 3.5a.5.5 0 000 1L3 7l-2.5 2.5a.5.5 0 10.707.707L4 7.707l1.646 1.647A6.025 6.025 0 018 10c2.09 0 3.943.695 5.354 1.646l.5.354.5-.354A.5.5 0 1013.646 11L12 9.354l2.5-2.5A.5.5 0 0014.207 6L12 8.207 9.793 6H9.5a.5.5 0 00-.5.5v.207L8 5.793 7 6.793V6.5a.5.5 0 00-.5-.5H6.207L4 3.793 2.207 5.586.5 3.5z" />
+              }
+            </svg>
+          </button>
+          {showAccounts && (
+            <select
+              value={mapMetric}
+              onChange={(e) => setMapAccountMetric(e.target.value)}
+              title="Map metric"
+              aria-label="Map metric"
+              className="rounded-lg border border-zinc-200 bg-white py-1 pl-2 pr-6 text-xs text-zinc-600 outline-none focus:border-blue-400 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+            >
+              <option value="count">Count</option>
+              {metricFields.map((f) => (
+                <option key={f.id} value={f.id}>{f.label}</option>
+              ))}
+            </select>
           )}
-        </button>
-        {accountOrder.length > 0 && (
-          <>
-            <button
-              onClick={toggleShowAccounts}
-              title={showAccounts ? 'Hide accounts on map' : 'Show accounts on map'}
-              className={`flex h-7 w-7 items-center justify-center rounded-lg border transition-colors ${
-                showAccounts
-                  ? 'border-blue-300 bg-blue-50 text-blue-600 dark:border-blue-700 dark:bg-blue-950 dark:text-blue-400'
-                  : 'border-zinc-200 bg-white text-zinc-400 dark:border-zinc-700 dark:bg-zinc-800'
-              }`}
-            >
-              <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="currentColor">
-                {showAccounts
-                  ? <path d="M8 2a6 6 0 100 12A6 6 0 008 2zm0 2a4 4 0 110 8A4 4 0 018 4zm0 1.5a2.5 2.5 0 100 5 2.5 2.5 0 000-5z" />
-                  : <path d="M.5 3.5a.5.5 0 000 1L3 7l-2.5 2.5a.5.5 0 10.707.707L4 7.707l1.646 1.647A6.025 6.025 0 018 10c2.09 0 3.943.695 5.354 1.646l.5.354.5-.354A.5.5 0 1013.646 11L12 9.354l2.5-2.5A.5.5 0 0014.207 6L12 8.207 9.793 6H9.5a.5.5 0 00-.5.5v.207L8 5.793 7 6.793V6.5a.5.5 0 00-.5-.5H6.207L4 3.793 2.207 5.586.5 3.5z" />
-                }
-              </svg>
-            </button>
-            {showAccounts && (
-              <select
-                value={mapMetric}
-                onChange={(e) => setMapAccountMetric(e.target.value)}
-                title="Map metric"
-                className="rounded-lg border border-zinc-200 bg-white py-1 pl-2 pr-6 text-xs text-zinc-600 outline-none focus:border-blue-400 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
-              >
-                <option value="count">Count</option>
-                {metricFields.map((f) => (
-                  <option key={f.id} value={f.id}>{f.label}</option>
-                ))}
-              </select>
-            )}
-            <button
-              onClick={() => { if (confirm('Remove all imported accounts?')) clearAccounts(); }}
-              title="Clear accounts"
-              className="flex h-7 w-7 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-400 hover:border-red-300 hover:text-red-500 dark:border-zinc-700 dark:bg-zinc-800"
-            >
-              <svg className="h-3 w-3" viewBox="0 0 16 16" fill="currentColor">
-                <path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z" />
-              </svg>
-            </button>
-          </>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* View toggle */}
       <div className="flex rounded-lg border border-zinc-200 p-0.5 dark:border-zinc-700">
@@ -189,8 +180,5 @@ export default function Toolbar({ drillDownCountryName }: ToolbarProps) {
         </button>
       </div>
     </header>
-
-    {showImport && <ImportAccountsModal onClose={() => setShowImport(false)} />}
-    </>
   );
 }

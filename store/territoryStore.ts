@@ -18,16 +18,6 @@ import type { MapThemeId } from '@/lib/mapThemes';
 import { DEFAULT_FIELD_DEFS } from '@/lib/accountFields';
 import type { FieldDefinition } from '@/lib/accountFields';
 
-function buildFieldDefaults(fieldDefs: FieldDefinition[]): Record<string, string | number> {
-  const defaults: Record<string, string | number> = {};
-  fieldDefs.forEach((def) => {
-    if (def.type === 'metric') defaults[def.id] = 0;
-    else if (def.type === 'categorical' && def.options?.length) defaults[def.id] = def.options[0];
-    else defaults[def.id] = '';
-  });
-  return defaults;
-}
-
 interface TerritoryStoreActions {
   // Teams
   addTeam: (name: string, color?: string) => void;
@@ -64,22 +54,14 @@ interface TerritoryStoreActions {
     teamId: string,
   ) => void;
 
-  // Field definitions
-  addFieldDef: (def: Omit<FieldDefinition, 'id'>) => void;
-  updateFieldDef: (id: string, patch: Partial<Omit<FieldDefinition, 'id'>>) => void;
-  removeFieldDef: (id: string) => void;
-  reorderFieldDefs: (orderedIds: string[]) => void;
-
-  // Accounts
-  addAccount: (data: { name: string; country: string; state?: string; repId?: string | null; fields?: Record<string, string | number> }) => void;
-  updateAccount: (id: string, patch: Partial<Omit<Account, 'id'>>) => void;
-  setAccountField: (accountId: string, fieldId: string, value: string | number) => void;
-  deleteAccount: (id: string) => void;
-  deleteAccounts: (ids: string[]) => void;
-  importAccounts: (rows: Array<{ name: string; country: string; state?: string; repId?: string | null; fields?: Record<string, string | number> }>) => void;
-  clearAccounts: () => void;
+  // Accounts + field defs — read-side UI state only; data comes from Directus
   toggleShowAccounts: () => void;
   setMapAccountMetric: (metric: string) => void;
+
+  // Hydration (bulk, single-shot writers called by the Directus fetch hook)
+  hydrateAccounts: (accounts: Account[]) => void;
+  hydrateFieldDefs: (defs: FieldDefinition[]) => void;
+  hydrateMembers: (members: Array<{ id: string; name: string; teamId: string | null }>) => void;
 
   // UI
   setActiveView: (view: 'map' | 'spreadsheet') => void;
@@ -316,113 +298,44 @@ export const useTerritoryStore = create<TerritoryStore>()((set, get) => ({
     });
   },
 
-  // ── Field Definitions ─────────────────────────────────────────────────
-  addFieldDef(def) {
-    const id = `field-${crypto.randomUUID()}`;
-    set((s) => ({
-      fieldDefs: [...s.fieldDefs, { id, ...def }],
-    }));
-  },
-
-  updateFieldDef(id, patch) {
-    set((s) => ({
-      fieldDefs: s.fieldDefs.map((d) => (d.id === id ? { ...d, ...patch } : d)),
-    }));
-  },
-
-  removeFieldDef(id) {
-    set((s) => ({
-      fieldDefs: s.fieldDefs.filter((d) => d.id !== id),
-    }));
-  },
-
-  reorderFieldDefs(orderedIds) {
-    set((s) => {
-      const map = Object.fromEntries(s.fieldDefs.map((d) => [d.id, d]));
-      return { fieldDefs: orderedIds.map((id) => map[id]).filter(Boolean) };
+  // ── Hydration (Directus) ───────────────────────────────────────────────
+  hydrateAccounts(incoming) {
+    const accounts: Record<string, Account> = {};
+    const accountOrder: string[] = [];
+    incoming.forEach((a) => {
+      accounts[a.id] = a;
+      accountOrder.push(a.id);
     });
+    set({ accounts, accountOrder });
   },
 
-  // ── Accounts ───────────────────────────────────────────────────────────
-  addAccount(data) {
-    const id = `account-${crypto.randomUUID()}`;
-    const defaults = buildFieldDefaults(get().fieldDefs);
-    const account: Account = {
-      id,
-      name: data.name,
-      country: data.country,
-      state: data.state,
-      repId: data.repId ?? null,
-      fields: { ...defaults, ...(data.fields ?? {}) },
-    };
-    set((s) => ({
-      accounts: { ...s.accounts, [id]: account },
-      accountOrder: [...s.accountOrder, id],
-    }));
+  hydrateFieldDefs(defs) {
+    set({ fieldDefs: defs });
   },
 
-  updateAccount(id, patch) {
-    set((s) => ({
-      accounts: { ...s.accounts, [id]: { ...s.accounts[id], ...patch } },
-    }));
-  },
-
-  setAccountField(accountId, fieldId, value) {
+  hydrateMembers(incoming) {
+    // Directus owns members; rebuild the members map and attach them to teams
+    // by the team_id mirror. Teams already exist from local seed.
     set((s) => {
-      const account = s.accounts[accountId];
-      if (!account) return {};
-      return {
-        accounts: {
-          ...s.accounts,
-          [accountId]: {
-            ...account,
-            fields: { ...account.fields, [fieldId]: value },
-          },
-        },
-      };
-    });
-  },
-
-  deleteAccount(id) {
-    set((s) => {
-      const accounts = { ...s.accounts };
-      delete accounts[id];
-      return { accounts, accountOrder: s.accountOrder.filter((aid) => aid !== id) };
-    });
-  },
-
-  deleteAccounts(ids) {
-    const idSet = new Set(ids);
-    set((s) => {
-      const accounts = { ...s.accounts };
-      ids.forEach((id) => delete accounts[id]);
-      return { accounts, accountOrder: s.accountOrder.filter((id) => !idSet.has(id)) };
-    });
-  },
-
-  importAccounts(rows) {
-    set((s) => {
-      const defaults = buildFieldDefaults(s.fieldDefs);
-      const accounts = { ...s.accounts };
-      const accountOrder = [...s.accountOrder];
-      rows.forEach((row) => {
-        const id = `account-${crypto.randomUUID()}`;
-        accounts[id] = {
-          id,
-          name: row.name,
-          country: row.country,
-          state: row.state,
-          repId: row.repId ?? null,
-          fields: { ...defaults, ...(row.fields ?? {}) },
-        };
-        accountOrder.push(id);
+      const members: Record<string, Member> = {};
+      const teams: Record<string, SalesTeam> = {};
+      s.teamOrder.forEach((tid) => {
+        teams[tid] = { ...s.teams[tid], memberIds: [] };
       });
-      return { accounts, accountOrder };
+      incoming.forEach((m) => {
+        members[m.id] = {
+          id: m.id,
+          name: m.name,
+          email: s.members[m.id]?.email ?? '',
+          role: s.members[m.id]?.role ?? '',
+          level: s.members[m.id]?.level ?? 'IC',
+        };
+        if (m.teamId && teams[m.teamId]) {
+          teams[m.teamId].memberIds.push(m.id);
+        }
+      });
+      return { members, teams };
     });
-  },
-
-  clearAccounts() {
-    set({ accounts: {}, accountOrder: [] });
   },
 
   toggleShowAccounts() {
