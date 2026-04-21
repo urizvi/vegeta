@@ -19,7 +19,7 @@
 import { randomUUID } from 'node:crypto';
 
 const URL = process.env.DIRECTUS_URL ?? 'http://localhost:8055';
-const EMAIL = process.env.DIRECTUS_ADMIN_EMAIL ?? 'admin@vegeta.local';
+const EMAIL = process.env.DIRECTUS_ADMIN_EMAIL ?? 'admin@example.com';
 const PASSWORD = process.env.DIRECTUS_ADMIN_PASSWORD ?? 'admin';
 
 async function api(token, method, path, body) {
@@ -54,7 +54,7 @@ async function tryCreate(token, path, body, label) {
     await api(token, 'POST', path, body);
     console.log(`  ✓ created ${label}`);
   } catch (e) {
-    if (/already exists|duplicate|record not unique/i.test(e.message)) {
+    if (/already exists|duplicate|record not unique|already has an associated relationship/i.test(e.message)) {
       console.log(`  ⟳ ${label} already exists — skipping`);
     } else {
       throw e;
@@ -173,7 +173,7 @@ const ACCOUNTS_COLLECTION = {
 // ── Role + permissions + token ────────────────────────────────────────────
 
 const VIEWER_ROLE_NAME = 'Vegeta Viewer';
-const VIEWER_USER_EMAIL = 'viewer@vegeta.local';
+const VIEWER_USER_EMAIL = 'viewer@example.com';
 
 // ── Main ──────────────────────────────────────────────────────────────────
 
@@ -212,10 +212,36 @@ async function main() {
     console.log(`  ⟳ role already exists (${viewerRoleId})`);
   }
 
+  console.log('→ Creating viewer policy');
+  const existingPolicies = await api(token, 'GET', `/policies?filter[name][_eq]=${encodeURIComponent(VIEWER_ROLE_NAME)}`);
+  let viewerPolicyId = existingPolicies?.[0]?.id;
+  if (!viewerPolicyId) {
+    const policy = await api(token, 'POST', '/policies', {
+      name: VIEWER_ROLE_NAME,
+      icon: 'visibility',
+      description: 'Read-only access to accounts, field_definitions, members',
+      admin_access: false,
+      app_access: false,
+    });
+    viewerPolicyId = policy.id;
+    console.log(`  ✓ created policy ${viewerPolicyId}`);
+  } else {
+    console.log(`  ⟳ policy already exists (${viewerPolicyId})`);
+  }
+
+  console.log('→ Linking policy to role');
+  const existingAccess = await api(token, 'GET', `/access?filter[role][_eq]=${viewerRoleId}&filter[policy][_eq]=${viewerPolicyId}`);
+  if (!existingAccess?.length) {
+    await api(token, 'POST', '/access', { role: viewerRoleId, policy: viewerPolicyId });
+    console.log('  ✓ linked');
+  } else {
+    console.log('  ⟳ already linked');
+  }
+
   console.log('→ Granting read permissions');
   for (const collection of ['accounts', 'field_definitions', 'members']) {
     await tryCreate(token, '/permissions', {
-      role: viewerRoleId,
+      policy: viewerPolicyId,
       collection,
       action: 'read',
       fields: ['*'],

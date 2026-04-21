@@ -25,7 +25,7 @@ services:
     environment:
       KEY: 'vegeta-local-key-change-in-prod'
       SECRET: 'vegeta-local-secret-change-in-prod'
-      ADMIN_EMAIL: admin@vegeta.local
+      ADMIN_EMAIL: admin@example.com
       ADMIN_PASSWORD: admin
       DB_CLIENT: pg
       DB_HOST: directus-db
