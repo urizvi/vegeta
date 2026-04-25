@@ -2,7 +2,6 @@ import type { Account } from '@/types/account';
 import type { FieldDefinition, FieldType } from '@/lib/accountFields';
 
 const BASE_URL = process.env.NEXT_PUBLIC_DIRECTUS_URL;
-const TOKEN = process.env.NEXT_PUBLIC_DIRECTUS_TOKEN;
 
 /** Public deep-link base for the Directus admin UI (toolbar "Manage Accounts" link). */
 export const DIRECTUS_ADMIN_URL =
@@ -38,11 +37,11 @@ interface MemberRow {
 
 async function fetchItems<T>(collection: string): Promise<T[]> {
   if (!BASE_URL) throw new Error('NEXT_PUBLIC_DIRECTUS_URL is not set');
-  if (!TOKEN) throw new Error('NEXT_PUBLIC_DIRECTUS_TOKEN is not set');
   const res = await fetch(`${BASE_URL}/items/${collection}?limit=-1`, {
-    headers: { Authorization: `Bearer ${TOKEN}` },
+    credentials: 'include',
     cache: 'no-store',
   });
+  if (res.status === 401) throw new Error('Not authenticated');
   if (!res.ok) {
     throw new Error(`Directus ${collection}: ${res.status} ${res.statusText}`);
   }

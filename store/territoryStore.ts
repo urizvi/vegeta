@@ -17,6 +17,8 @@ import { DEFAULT_THEME_ID } from '@/lib/mapThemes';
 import type { MapThemeId } from '@/lib/mapThemes';
 import { DEFAULT_FIELD_DEFS } from '@/lib/accountFields';
 import type { FieldDefinition } from '@/lib/accountFields';
+import * as directusWrite from '@/lib/directus-write';
+import { getAccounts as fetchAccounts } from '@/lib/directus';
 
 interface TerritoryStoreActions {
   // Teams
@@ -57,6 +59,24 @@ interface TerritoryStoreActions {
   // Accounts + field defs — read-side UI state only; data comes from Directus
   toggleShowAccounts: () => void;
   setMapAccountMetric: (metric: string) => void;
+
+  // Account writes (Directus-backed; local cache updated from server response).
+  addAccount: (
+    data: { name: string; country: string; state?: string; repId?: string | null; fields?: Record<string, string | number> },
+  ) => Promise<void>;
+  updateAccount: (id: string, patch: Partial<Omit<Account, 'id'>>) => Promise<void>;
+  setAccountField: (accountId: string, fieldId: string, value: string | number) => Promise<void>;
+  deleteAccount: (id: string) => Promise<void>;
+  deleteAccounts: (ids: string[]) => Promise<void>;
+  importAccounts: (
+    rows: Array<{ name: string; country: string; state?: string; repId?: string | null; fields?: Record<string, string | number> }>,
+  ) => Promise<void>;
+
+  // Field-def writes (Directus-backed).
+  addFieldDef: (def: Omit<FieldDefinition, 'id'>) => Promise<void>;
+  updateFieldDef: (id: string, patch: Partial<Omit<FieldDefinition, 'id'>>) => Promise<void>;
+  removeFieldDef: (id: string) => Promise<void>;
+  reorderFieldDefs: (orderedIds: string[]) => Promise<void>;
 
   // Hydration (bulk, single-shot writers called by the Directus fetch hook)
   hydrateAccounts: (accounts: Account[]) => void;
@@ -344,6 +364,193 @@ export const useTerritoryStore = create<TerritoryStore>()((set, get) => ({
 
   setMapAccountMetric(metric) {
     set({ mapAccountMetric: metric });
+  },
+
+  // ── Account writes (optimistic, reconcile from Directus on failure) ────
+  async addAccount(data) {
+    try {
+      const created = await directusWrite.createAccount({
+        name: data.name,
+        country: data.country,
+        state: data.state,
+        repId: data.repId ?? null,
+        fields: data.fields ?? {},
+      });
+      set((s) => ({
+        accounts: { ...s.accounts, [created.id]: created },
+        accountOrder: [...s.accountOrder, created.id],
+      }));
+    } catch (err) {
+      console.error('addAccount failed', err);
+      throw err;
+    }
+  },
+
+  async updateAccount(id, patch) {
+    const prev = get().accounts[id];
+    if (!prev) return;
+    // Optimistic
+    set((s) => ({ accounts: { ...s.accounts, [id]: { ...prev, ...patch } } }));
+    try {
+      const updated = await directusWrite.updateAccount(id, patch);
+      set((s) => ({ accounts: { ...s.accounts, [id]: updated } }));
+    } catch (err) {
+      console.error('updateAccount failed; reverting', err);
+      set((s) => ({ accounts: { ...s.accounts, [id]: prev } }));
+      throw err;
+    }
+  },
+
+  async setAccountField(accountId, fieldId, value) {
+    const prev = get().accounts[accountId];
+    if (!prev) return;
+    const nextFields = { ...prev.fields, [fieldId]: value };
+    // Optimistic
+    set((s) => ({
+      accounts: { ...s.accounts, [accountId]: { ...prev, fields: nextFields } },
+    }));
+    try {
+      const updated = await directusWrite.updateAccount(accountId, { fields: nextFields });
+      set((s) => ({ accounts: { ...s.accounts, [accountId]: updated } }));
+    } catch (err) {
+      console.error('setAccountField failed; reverting', err);
+      set((s) => ({ accounts: { ...s.accounts, [accountId]: prev } }));
+      throw err;
+    }
+  },
+
+  async deleteAccount(id) {
+    const prev = get().accounts[id];
+    const prevOrder = get().accountOrder;
+    if (!prev) return;
+    // Optimistic
+    set((s) => {
+      const accounts = { ...s.accounts };
+      delete accounts[id];
+      return { accounts, accountOrder: s.accountOrder.filter((aid) => aid !== id) };
+    });
+    try {
+      await directusWrite.deleteAccount(id);
+    } catch (err) {
+      console.error('deleteAccount failed; reverting', err);
+      set({ accounts: { ...get().accounts, [id]: prev }, accountOrder: prevOrder });
+      throw err;
+    }
+  },
+
+  async importAccounts(rows) {
+    const defs = get().fieldDefs;
+    const defaults: Record<string, string | number> = {};
+    defs.forEach((d) => {
+      if (d.type === 'metric') defaults[d.id] = 0;
+      else if (d.type === 'categorical' && d.options?.length) defaults[d.id] = d.options[0];
+      else defaults[d.id] = '';
+    });
+    const inputs = rows.map((r) => ({
+      name: r.name,
+      country: r.country,
+      state: r.state,
+      repId: r.repId ?? null,
+      fields: { ...defaults, ...(r.fields ?? {}) },
+    }));
+    try {
+      const created = await directusWrite.createAccountsBulk(inputs);
+      set((s) => {
+        const accounts = { ...s.accounts };
+        const accountOrder = [...s.accountOrder];
+        created.forEach((a) => {
+          accounts[a.id] = a;
+          accountOrder.push(a.id);
+        });
+        return { accounts, accountOrder };
+      });
+    } catch (err) {
+      console.error('importAccounts failed', err);
+      throw err;
+    }
+  },
+
+  async addFieldDef(def) {
+    try {
+      const sort = get().fieldDefs.length;
+      const created = await directusWrite.createFieldDef(def, sort);
+      set((s) => ({ fieldDefs: [...s.fieldDefs, created] }));
+    } catch (err) {
+      console.error('addFieldDef failed', err);
+      throw err;
+    }
+  },
+
+  async updateFieldDef(id, patch) {
+    const prev = get().fieldDefs.find((d) => d.id === id);
+    if (!prev) return;
+    // Optimistic
+    set((s) => ({
+      fieldDefs: s.fieldDefs.map((d) => (d.id === id ? { ...d, ...patch } : d)),
+    }));
+    try {
+      const updated = await directusWrite.updateFieldDef(id, patch);
+      set((s) => ({
+        fieldDefs: s.fieldDefs.map((d) => (d.id === id ? updated : d)),
+      }));
+    } catch (err) {
+      console.error('updateFieldDef failed; reverting', err);
+      set((s) => ({
+        fieldDefs: s.fieldDefs.map((d) => (d.id === id ? prev : d)),
+      }));
+      throw err;
+    }
+  },
+
+  async removeFieldDef(id) {
+    const prev = get().fieldDefs;
+    set((s) => ({ fieldDefs: s.fieldDefs.filter((d) => d.id !== id) }));
+    try {
+      await directusWrite.deleteFieldDef(id);
+    } catch (err) {
+      console.error('removeFieldDef failed; reverting', err);
+      set({ fieldDefs: prev });
+      throw err;
+    }
+  },
+
+  async reorderFieldDefs(orderedIds) {
+    const prev = get().fieldDefs;
+    const map = Object.fromEntries(prev.map((d) => [d.id, d]));
+    const next = orderedIds.map((id) => map[id]).filter(Boolean);
+    set({ fieldDefs: next });
+    try {
+      await directusWrite.reorderFieldDefs(orderedIds);
+    } catch (err) {
+      console.error('reorderFieldDefs failed; reverting', err);
+      set({ fieldDefs: prev });
+      throw err;
+    }
+  },
+
+  async deleteAccounts(ids) {
+    const idSet = new Set(ids);
+    const prevAccounts = get().accounts;
+    const prevOrder = get().accountOrder;
+    // Optimistic
+    set((s) => {
+      const accounts = { ...s.accounts };
+      ids.forEach((id) => delete accounts[id]);
+      return { accounts, accountOrder: s.accountOrder.filter((id) => !idSet.has(id)) };
+    });
+    try {
+      await directusWrite.deleteAccounts(ids);
+    } catch (err) {
+      console.error('deleteAccounts failed; refetching to reconcile', err);
+      // Best-effort reconcile: refetch from server.
+      try {
+        const fresh = await fetchAccounts();
+        get().hydrateAccounts(fresh);
+      } catch {
+        set({ accounts: prevAccounts, accountOrder: prevOrder });
+      }
+      throw err;
+    }
   },
 
   // ── UI ─────────────────────────────────────────────────────────────────

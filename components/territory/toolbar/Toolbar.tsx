@@ -1,10 +1,12 @@
 'use client';
 
+import Link from 'next/link';
 import {
   useActiveView, useDrillDownCountryCode, useMapTheme, useAccountOrder,
   useShowAccounts, useMapAccountMetric, useActions, useMetricFields,
 } from '@/hooks/useTerritoryStore';
-import { DIRECTUS_ADMIN_URL } from '@/lib/directus';
+import { logout } from '@/lib/auth';
+import { useRouter } from 'next/navigation';
 import { MAP_THEMES } from '@/lib/mapThemes';
 import type { MapThemeId } from '@/lib/mapThemes';
 
@@ -27,7 +29,12 @@ export default function Toolbar({ drillDownCountryName }: ToolbarProps) {
     toggleShowAccounts, setMapAccountMetric,
   } = useActions();
 
-  const manageAccountsUrl = `${DIRECTUS_ADMIN_URL}/content/accounts`;
+  const router = useRouter();
+
+  async function handleSignOut() {
+    await logout();
+    router.replace('/login');
+  }
 
   return (
     <header className="flex items-center gap-3 border-b border-zinc-200 bg-white px-4 py-2.5 dark:border-zinc-700 dark:bg-zinc-950">
@@ -39,18 +46,12 @@ export default function Toolbar({ drillDownCountryName }: ToolbarProps) {
         <span className="rounded-md bg-zinc-900 px-2.5 py-1 font-medium text-white dark:bg-zinc-100 dark:text-zinc-900">
           Territory
         </span>
-        <a
-          href={manageAccountsUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-1 rounded-md px-2.5 py-1 font-medium text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
-          title="Manage accounts in Directus (opens new tab)"
+        <Link
+          href="/accounts"
+          className="rounded-md px-2.5 py-1 font-medium text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
         >
-          Manage Accounts
-          <svg className="h-2.5 w-2.5" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true">
-            <path d="M3 0v1h4.293L0 8.293 1.707 10 9 2.707V7h1V0H3z" />
-          </svg>
-        </a>
+          Accounts
+        </Link>
       </div>
 
       {/* Breadcrumb */}
@@ -179,6 +180,14 @@ export default function Toolbar({ drillDownCountryName }: ToolbarProps) {
           Spreadsheet
         </button>
       </div>
+
+      <button
+        onClick={handleSignOut}
+        className="rounded-lg border border-zinc-200 px-2.5 py-1.5 text-xs font-medium text-zinc-600 hover:text-zinc-900 dark:border-zinc-700 dark:text-zinc-300 dark:hover:text-zinc-100"
+        title="Sign out"
+      >
+        Sign out
+      </button>
     </header>
   );
 }

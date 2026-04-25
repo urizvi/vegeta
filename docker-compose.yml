@@ -36,7 +36,11 @@ services:
       WEBSOCKETS_ENABLED: 'true'
       CORS_ENABLED: 'true'
       CORS_ORIGIN: 'http://localhost:3000'
+      CORS_CREDENTIALS: 'true'
       PUBLIC_URL: 'http://localhost:8055'
+      SESSION_COOKIE_DOMAIN: ${SESSION_COOKIE_DOMAIN:-localhost}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
+      SESSION_COOKIE_SAME_SITE: ${SESSION_COOKIE_SAME_SITE:-lax}
     volumes:
       - directus-uploads:/directus/uploads
       - directus-extensions:/directus/extensions

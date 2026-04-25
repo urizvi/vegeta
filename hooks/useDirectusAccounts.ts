@@ -3,9 +3,10 @@
 import { useEffect, useState } from 'react';
 import { useTerritoryStore } from '@/store/territoryStore';
 import { getAccounts, getFieldDefinitions, getMembers } from '@/lib/directus';
+import { useAuth } from '@/hooks/useAuth';
 
 interface State {
-  status: 'idle' | 'loading' | 'ready' | 'error';
+  status: 'idle' | 'loading' | 'ready' | 'error' | 'unauthenticated';
   error: Error | null;
 }
 
@@ -15,9 +16,11 @@ interface State {
  * app continues to work unchanged — this hook is the only write path.
  */
 export function useDirectusAccounts(): State {
-  const [state, setState] = useState<State>({ status: 'loading', error: null });
+  const { status: authStatus } = useAuth();
+  const [fetchState, setFetchState] = useState<State>({ status: 'loading', error: null });
 
   useEffect(() => {
+    if (authStatus !== 'authenticated') return;
     let cancelled = false;
     (async () => {
       try {
@@ -31,14 +34,16 @@ export function useDirectusAccounts(): State {
         hydrateFieldDefs(fieldDefs);
         hydrateMembers(members);
         hydrateAccounts(accounts);
-        setState({ status: 'ready', error: null });
+        setFetchState({ status: 'ready', error: null });
       } catch (err) {
         if (cancelled) return;
-        setState({ status: 'error', error: err as Error });
+        setFetchState({ status: 'error', error: err as Error });
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [authStatus]);
 
-  return state;
+  if (authStatus === 'unauthenticated') return { status: 'unauthenticated', error: null };
+  if (authStatus === 'loading') return { status: 'loading', error: null };
+  return fetchState;
 }

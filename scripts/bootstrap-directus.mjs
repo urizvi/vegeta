@@ -16,8 +16,6 @@
  *   DIRECTUS_URL, DIRECTUS_ADMIN_EMAIL, DIRECTUS_ADMIN_PASSWORD
  */
 
-import { randomUUID } from 'node:crypto';
-
 const URL = process.env.DIRECTUS_URL ?? 'http://localhost:8055';
 const EMAIL = process.env.DIRECTUS_ADMIN_EMAIL ?? 'admin@example.com';
 const PASSWORD = process.env.DIRECTUS_ADMIN_PASSWORD ?? 'admin';
@@ -170,10 +168,81 @@ const ACCOUNTS_COLLECTION = {
   ],
 };
 
-// ── Role + permissions + token ────────────────────────────────────────────
+// ── Roles + policies ──────────────────────────────────────────────────────
 
-const VIEWER_ROLE_NAME = 'Vegeta Viewer';
-const VIEWER_USER_EMAIL = 'viewer@example.com';
+const ROLE_DEFS = [
+  {
+    name: 'Viewer',
+    icon: 'visibility',
+    description: 'Read-only access to accounts, field_definitions, members',
+    app_access: false,
+    actions: ['read'],
+  },
+  {
+    name: 'Editor',
+    icon: 'edit',
+    description: 'Full CRUD on accounts, field_definitions, members',
+    app_access: true,
+    actions: ['create', 'read', 'update', 'delete'],
+  },
+];
+
+async function ensureRole(token, def) {
+  const existing = await api(token, 'GET', `/roles?filter[name][_eq]=${encodeURIComponent(def.name)}`);
+  if (existing?.[0]) {
+    console.log(`  ⟳ role "${def.name}" exists (${existing[0].id})`);
+    return existing[0].id;
+  }
+  const created = await api(token, 'POST', '/roles', {
+    name: def.name,
+    icon: def.icon,
+    description: def.description,
+  });
+  console.log(`  ✓ created role "${def.name}" (${created.id})`);
+  return created.id;
+}
+
+async function ensurePolicy(token, def) {
+  const existing = await api(token, 'GET', `/policies?filter[name][_eq]=${encodeURIComponent(def.name)}`);
+  if (existing?.[0]) {
+    console.log(`  ⟳ policy "${def.name}" exists (${existing[0].id})`);
+    return existing[0].id;
+  }
+  const created = await api(token, 'POST', '/policies', {
+    name: def.name,
+    icon: def.icon,
+    description: def.description,
+    admin_access: false,
+    app_access: def.app_access,
+  });
+  console.log(`  ✓ created policy "${def.name}" (${created.id})`);
+  return created.id;
+}
+
+async function linkRoleToPolicy(token, roleId, policyId, label) {
+  const existing = await api(token, 'GET', `/access?filter[role][_eq]=${roleId}&filter[policy][_eq]=${policyId}`);
+  if (existing?.length) {
+    console.log(`  ⟳ ${label} already linked`);
+    return;
+  }
+  await api(token, 'POST', '/access', { role: roleId, policy: policyId });
+  console.log(`  ✓ linked ${label}`);
+}
+
+async function grantPermissions(token, policyId, collections, actions, label) {
+  for (const collection of collections) {
+    for (const action of actions) {
+      await tryCreate(token, '/permissions', {
+        policy: policyId,
+        collection,
+        action,
+        fields: ['*'],
+        permissions: {},
+        validation: {},
+      }, `${label}: ${action} ${collection}`);
+    }
+  }
+}
 
 // ── Main ──────────────────────────────────────────────────────────────────
 
@@ -195,90 +264,26 @@ async function main() {
     schema: { on_delete: 'SET NULL' },
   }, 'accounts.rep_id → members');
 
-  console.log('→ Creating viewer role');
-  const existingRoles = await api(token, 'GET', `/roles?filter[name][_eq]=${encodeURIComponent(VIEWER_ROLE_NAME)}`);
-  let viewerRoleId = existingRoles?.[0]?.id;
-  if (!viewerRoleId) {
-    const role = await api(token, 'POST', '/roles', {
-      name: VIEWER_ROLE_NAME,
-      icon: 'visibility',
-      description: 'Read-only access to accounts, field_definitions, members',
-      admin_access: false,
-      app_access: false,
-    });
-    viewerRoleId = role.id;
-    console.log(`  ✓ created role ${viewerRoleId}`);
-  } else {
-    console.log(`  ⟳ role already exists (${viewerRoleId})`);
-  }
+  const COLLECTIONS = ['accounts', 'field_definitions', 'members'];
 
-  console.log('→ Creating viewer policy');
-  const existingPolicies = await api(token, 'GET', `/policies?filter[name][_eq]=${encodeURIComponent(VIEWER_ROLE_NAME)}`);
-  let viewerPolicyId = existingPolicies?.[0]?.id;
-  if (!viewerPolicyId) {
-    const policy = await api(token, 'POST', '/policies', {
-      name: VIEWER_ROLE_NAME,
-      icon: 'visibility',
-      description: 'Read-only access to accounts, field_definitions, members',
-      admin_access: false,
-      app_access: false,
-    });
-    viewerPolicyId = policy.id;
-    console.log(`  ✓ created policy ${viewerPolicyId}`);
-  } else {
-    console.log(`  ⟳ policy already exists (${viewerPolicyId})`);
-  }
-
-  console.log('→ Linking policy to role');
-  const existingAccess = await api(token, 'GET', `/access?filter[role][_eq]=${viewerRoleId}&filter[policy][_eq]=${viewerPolicyId}`);
-  if (!existingAccess?.length) {
-    await api(token, 'POST', '/access', { role: viewerRoleId, policy: viewerPolicyId });
-    console.log('  ✓ linked');
-  } else {
-    console.log('  ⟳ already linked');
-  }
-
-  console.log('→ Granting read permissions');
-  for (const collection of ['accounts', 'field_definitions', 'members']) {
-    await tryCreate(token, '/permissions', {
-      policy: viewerPolicyId,
-      collection,
-      action: 'read',
-      fields: ['*'],
-      permissions: {},
-      validation: {},
-    }, `read ${collection}`);
-  }
-
-  console.log('→ Creating viewer user + static token');
-  const existingUsers = await api(token, 'GET', `/users?filter[email][_eq]=${encodeURIComponent(VIEWER_USER_EMAIL)}`);
-  let viewerUser = existingUsers?.[0];
-  const staticToken = viewerUser?.token ?? `vegeta-${randomUUID()}`;
-  if (!viewerUser) {
-    viewerUser = await api(token, 'POST', '/users', {
-      email: VIEWER_USER_EMAIL,
-      password: randomUUID(),
-      role: viewerRoleId,
-      token: staticToken,
-      status: 'active',
-    });
-    console.log(`  ✓ created user ${viewerUser.id}`);
-  } else {
-    if (!viewerUser.token) {
-      await api(token, 'PATCH', `/users/${viewerUser.id}`, { token: staticToken });
-      console.log(`  ✓ issued new token for existing user`);
-    } else {
-      console.log(`  ⟳ user already exists with a token`);
-    }
+  for (const def of ROLE_DEFS) {
+    console.log(`→ Ensuring role + policy: ${def.name}`);
+    const roleId = await ensureRole(token, def);
+    const policyId = await ensurePolicy(token, def);
+    await linkRoleToPolicy(token, roleId, policyId, def.name);
+    await grantPermissions(token, policyId, COLLECTIONS, def.actions, def.name);
   }
 
   console.log('\n─────────────────────────────────────────────────────────');
   console.log('✓ Bootstrap complete');
   console.log('─────────────────────────────────────────────────────────');
-  console.log('\nPaste this into .env.local:\n');
-  console.log(`NEXT_PUBLIC_DIRECTUS_URL=${URL}`);
-  console.log(`NEXT_PUBLIC_DIRECTUS_TOKEN=${staticToken}`);
-  console.log(`NEXT_PUBLIC_DIRECTUS_ADMIN_URL=${URL}/admin`);
+  console.log(`\nAdmin UI:  ${URL}/admin`);
+  console.log(`Admin:     ${EMAIL} / ${PASSWORD}`);
+  console.log('\nNext steps:');
+  console.log(`  1. Open ${URL}/admin and sign in as ${EMAIL}.`);
+  console.log('  2. Under User Directory → Create User. Assign role "Viewer" or "Editor".');
+  console.log('  3. Set a password; share credentials with that user.');
+  console.log('  4. They can now log in at the Next app\'s /login page.');
   console.log('');
 }
 
