@@ -5,7 +5,7 @@ import { ComposableMap, ZoomableGroup, Geographies, Geography, Graticule } from 
 import { useGeoData } from '@/hooks/useGeoData';
 import {
   useChoroplethFillColor, useMapTheme, useActions, useActivePaintGeoId, useActiveEraser,
-  usePinnedEntityIso,
+  usePinnedEntityIso, useEntityHighlight,
 } from '@/hooks/useTerritoryStore';
 import { useChoroplethScale } from '@/hooks/useChoroplethScale';
 import MapInfoRail from './MapInfoRail';
@@ -45,6 +45,7 @@ const CountryGeo = memo(function CountryGeo({
   const fill = useChoroplethFillColor(entityCode, scaleMax, choroplethActive);
   const pinnedIso = usePinnedEntityIso();
   const isPinned = pinnedIso === entityCode;
+  const isHighlighted = useEntityHighlight(entityCode);
   const { setHoveredEntityCode, setHoveredEntityIso } = useActions();
   const isUnassigned = fill === unassignedFill;
 
@@ -52,8 +53,8 @@ const CountryGeo = memo(function CountryGeo({
     <Geography
       geography={geo as unknown as import('react-simple-maps').GeographyFeature}
       fill={fill}
-      stroke={isPinned ? 'var(--color-brand)' : countryStroke}
-      strokeWidth={isPinned ? 1.5 : countryStrokeWidth}
+      stroke={isHighlighted ? 'var(--color-brand)' : isPinned ? 'var(--color-brand)' : countryStroke}
+      strokeWidth={isHighlighted ? 2 : isPinned ? 1.5 : countryStrokeWidth}
       style={{
         default: { outline: 'none', cursor: 'pointer', transition },
         hover:   { outline: 'none', fill: isUnassigned ? unassignedHover : fill, opacity: hoverOpacity },
@@ -80,11 +81,21 @@ export default function WorldMapView({ onDrillDown }: WorldMapViewProps) {
   const { assignCountryToGeo, clearCountryAssignment } = useActions();
   const { active: choroplethActive, scale } = useChoroplethScale('world');
   const scaleMax = scale?.max ?? 0;
-  const { togglePinnedEntityIso, setPinnedEntityIso } = useActions();
+  const { togglePinnedEntityIso, setPinnedEntityIso, clearHighlight } = useActions();
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const zoomRef = useRef(zoom);
   useEffect(() => { zoomRef.current = zoom; }, [zoom]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        clearHighlight();
+        setPinnedEntityIso(null);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [clearHighlight, setPinnedEntityIso]);
   const [center, setCenter] = useState<[number, number]>([0, 20]);
 
   // Stable reference — Geographies re-runs its effect whenever this changes

@@ -1,5 +1,6 @@
 import { useTerritoryStore } from '../territoryStore';
 import { MAP_THEMES } from '@/lib/mapThemes';
+import { COUNTRY_CENTROIDS } from '@/lib/countryCentroids';
 
 export const useActiveView = () => useTerritoryStore((s) => s.activeView);
 export const useMapTheme = () => useTerritoryStore((s) => MAP_THEMES[s.mapThemeId]);
@@ -121,5 +122,84 @@ export const useRegionRollup = (entityCode: string | null): RegionRollup | null 
         return { entityCode, name, geoTrail: [], count: 0, topMetricTotals: [], topOwners: [] };
       }
       return { entityCode, name, geoTrail: trail, count, topMetricTotals, topOwners };
+    }),
+  );
+
+// ── Coverage gaps & assignment conflicts ──────────────────────────────────────
+
+export interface CoverageInfo {
+  count: number;
+  codes: string[];
+}
+
+export const useCoverageGaps = (
+  view: 'world' | 'drilldown',
+  drilldownIso2?: string,
+) =>
+  useTerritoryStore(
+    useShallow((s): CoverageInfo => {
+      const idx = getEntityGeoIndex(s);
+      if (view === 'world') {
+        const codes: string[] = [];
+        for (const code of Object.keys(COUNTRY_CENTROIDS)) {
+          if (!idx[code]) codes.push(code);
+        }
+        return { count: codes.length, codes };
+      }
+      if (!drilldownIso2) return { count: 0, codes: [] };
+      const seen = new Set<string>();
+      for (const sid of s.subregionOrder) {
+        for (const code of s.subregions[sid]?.stateCodes ?? []) {
+          if (code.startsWith(`${drilldownIso2}:`)) seen.add(code);
+        }
+      }
+      const codes: string[] = [];
+      for (const code of seen) {
+        if (!idx[code]) codes.push(code);
+      }
+      return { count: codes.length, codes };
+    }),
+  );
+
+export const useAssignmentConflicts = (
+  view: 'world' | 'drilldown',
+  drilldownIso2?: string,
+) =>
+  useTerritoryStore(
+    useShallow((s): CoverageInfo => {
+      const idx = getEntityGeoIndex(s);
+      const conflicts: { country: string; state: string }[] = [];
+      for (const stateCode in idx) {
+        if (!stateCode.includes(':')) continue;
+        const country = stateCode.split(':')[0];
+        const stateNode = idx[stateCode];
+        const countryNode = idx[country];
+        if (!countryNode) continue;
+        if (stateNode === countryNode) continue;
+        const chain = (start: string) => {
+          const out = new Set<string>();
+          let cur: string | null = start;
+          const seen = new Set<string>();
+          while (cur && !seen.has(cur)) {
+            seen.add(cur);
+            out.add(cur);
+            cur = s.geoNodes[cur]?.parentId ?? null;
+          }
+          return out;
+        };
+        const stateChain = chain(stateNode);
+        const countryChain = chain(countryNode);
+        const compatible =
+          stateChain.has(countryNode) || countryChain.has(stateNode);
+        if (!compatible) conflicts.push({ country, state: stateCode });
+      }
+      if (view === 'world') {
+        const set = new Set(conflicts.map((c) => c.country));
+        return { count: set.size, codes: [...set] };
+      }
+      const filtered = drilldownIso2
+        ? conflicts.filter((c) => c.country === drilldownIso2)
+        : conflicts;
+      return { count: filtered.length, codes: filtered.map((c) => c.state) };
     }),
   );

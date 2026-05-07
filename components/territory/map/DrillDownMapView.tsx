@@ -1,13 +1,13 @@
 'use client';
 
-import { useState, useCallback, useMemo, memo } from 'react';
+import { useState, useCallback, useMemo, memo, useEffect } from 'react';
 import { ComposableMap, ZoomableGroup, Geographies, Geography, Graticule } from 'react-simple-maps';
 import { geoMercator, geoPath } from 'd3-geo';
 import { useCountryStates } from '@/hooks/useCountryStates';
 import type { StateFeature } from '@/hooks/useCountryStates';
 import {
   useChoroplethFillColor, useMapTheme, useActions, useActivePaintGeoId, useActiveEraser,
-  usePinnedEntityIso,
+  usePinnedEntityIso, useEntityHighlight,
 } from '@/hooks/useTerritoryStore';
 import { useChoroplethScale } from '@/hooks/useChoroplethScale';
 import { DrillDownAccountLayer } from './AccountLayer';
@@ -55,6 +55,7 @@ const StateGeo = memo(function StateGeo({
   const fill = useChoroplethFillColor(entityCode, scaleMax, choroplethActive);
   const pinnedIso = usePinnedEntityIso();
   const isPinned = pinnedIso === entityCode;
+  const isHighlighted = useEntityHighlight(entityCode);
   const { setHoveredEntityCode, setHoveredEntityIso } = useActions();
   const isUnassigned = fill === unassignedFill;
 
@@ -62,8 +63,8 @@ const StateGeo = memo(function StateGeo({
     <Geography
       geography={geo as unknown as import('react-simple-maps').GeographyFeature}
       fill={fill}
-      stroke={isPinned ? 'var(--color-brand)' : stateStroke}
-      strokeWidth={isPinned ? 1.5 : stateStrokeWidth}
+      stroke={isHighlighted ? 'var(--color-brand)' : isPinned ? 'var(--color-brand)' : stateStroke}
+      strokeWidth={isHighlighted ? 2 : isPinned ? 1.5 : stateStrokeWidth}
       style={{
         default: { outline: 'none', cursor: 'pointer', transition },
         hover:   { outline: 'none', fill: isUnassigned ? unassignedHover : fill, opacity: hoverOpacity },
@@ -109,8 +110,18 @@ export default function DrillDownMapView({ countryIso2, countryName }: DrillDown
   const { assignStateToGeo, clearStateAssignment } = useActions();
   const { active: choroplethActive, scale } = useChoroplethScale('drilldown', countryIso2);
   const scaleMax = scale?.max ?? 0;
-  const { togglePinnedEntityIso, setPinnedEntityIso } = useActions();
+  const { togglePinnedEntityIso, setPinnedEntityIso, clearHighlight } = useActions();
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        clearHighlight();
+        setPinnedEntityIso(null);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [clearHighlight, setPinnedEntityIso]);
   const useAlbers = isAlbersUsa(countryIso2);
   const solidBackdrop = useSolidBackdrop(countryIso2);
 
