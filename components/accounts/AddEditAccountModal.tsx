@@ -4,12 +4,17 @@ import { useRef, useEffect, useState, useMemo, useId } from 'react';
 import { useActions, useTeams, useTeamOrder, useMembers, useFieldDefs } from '@/hooks/useTerritoryStore';
 import { useGeoData } from '@/hooks/useGeoData';
 import { useCountryStates } from '@/hooks/useCountryStates';
+import { useEntityNoun } from '@/hooks/useEntityNoun';
+import { useOwnerNoun } from '@/hooks/useOwnerNoun';
+import { useModuleEnabled } from '@/hooks/useModuleEnabled';
 import type { Account } from '@/types/account';
+import GeoPicker from './GeoPicker';
 
 interface FormState {
   name: string;
   country: string;
   state?: string;
+  geoNodeId: string | null;
   repId: string | null;
   fields: Record<string, string | number>;
 }
@@ -23,6 +28,9 @@ export default function AddEditAccountModal({ account, onClose }: Props) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const uid = useId();
   const fieldDefs = useFieldDefs();
+  const entityNoun = useEntityNoun('singular');
+  const ownerNoun = useOwnerNoun();
+  const territoryEnabled = useModuleEnabled('territory');
   const { addAccount, updateAccount } = useActions();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,8 +43,9 @@ export default function AddEditAccountModal({ account, onClose }: Props) {
     if (account) {
       return {
         name: account.name,
-        country: account.country,
+        country: account.country ?? '',
         state: account.state,
+        geoNodeId: account.geoNodeId ?? null,
         repId: account.repId,
         fields: { ...account.fields },
       };
@@ -48,7 +57,7 @@ export default function AddEditAccountModal({ account, onClose }: Props) {
       else if (def.type === 'categorical' && def.options?.length) fields[def.id] = def.options[0];
       else fields[def.id] = '';
     });
-    return { name: '', country: '', repId: null, fields };
+    return { name: '', country: '', geoNodeId: null, repId: null, fields };
   });
 
   const { features: stateFeatures, loading: statesLoading } = useCountryStates(form.country || null);
@@ -85,8 +94,12 @@ export default function AddEditAccountModal({ account, onClose }: Props) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.name.trim() || !form.country) return;
-    const data = { ...form, name: form.name.trim() };
+    if (!form.name.trim()) return;
+    const data = {
+      ...form,
+      name: form.name.trim(),
+      country: form.country || undefined,
+    };
     setSubmitting(true);
     setError(null);
     try {
@@ -105,9 +118,9 @@ export default function AddEditAccountModal({ account, onClose }: Props) {
 
   const currentStateId = form.state ? form.state.split(':')[1] : '';
 
-  const inputCls = 'w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100';
+  const inputCls = 'w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100';
   const selectCls = inputCls;
-  const labelCls = 'mb-1 block text-xs font-medium text-zinc-500 dark:text-zinc-400';
+  const labelCls = 'mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400';
 
   const categoricalFields = fieldDefs.filter((f) => f.type === 'categorical');
   const metricFields      = fieldDefs.filter((f) => f.type === 'metric');
@@ -117,15 +130,15 @@ export default function AddEditAccountModal({ account, onClose }: Props) {
     <dialog
       ref={dialogRef}
       aria-labelledby="add-edit-account-title"
-      className="m-auto w-full max-w-xl rounded-2xl border border-zinc-200 bg-white p-0 shadow-2xl backdrop:bg-black/30 dark:border-zinc-700 dark:bg-zinc-900"
+      className="m-auto w-full max-w-xl rounded-2xl border border-slate-200 bg-white p-0 shadow-2xl backdrop:bg-black/30 dark:border-slate-700 dark:bg-slate-900"
       onClose={onClose}
     >
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-4 dark:border-zinc-700">
-        <h2 id="add-edit-account-title" className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">
-          {account ? 'Edit Account' : 'Add Account'}
+      <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4 dark:border-slate-700">
+        <h2 id="add-edit-account-title" className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+          {account ? `Edit ${entityNoun}` : `Add ${entityNoun}`}
         </h2>
-        <button type="button" aria-label="Close" onClick={onClose} className="flex h-6 w-6 items-center justify-center rounded text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800">
+        <button type="button" aria-label="Close" onClick={onClose} className="flex h-6 w-6 items-center justify-center rounded text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">
           <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
             <path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z" />
           </svg>
@@ -137,7 +150,7 @@ export default function AddEditAccountModal({ account, onClose }: Props) {
 
           {/* Name */}
           <div>
-            <label htmlFor={`${uid}-name`} className={labelCls}>Account Name *</label>
+            <label htmlFor={`${uid}-name`} className={labelCls}>{entityNoun} Name *</label>
             <input
               id={`${uid}-name`}
               autoFocus
@@ -152,15 +165,14 @@ export default function AddEditAccountModal({ account, onClose }: Props) {
           {/* Location */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label htmlFor={`${uid}-country`} className={labelCls}>Country *</label>
+              <label htmlFor={`${uid}-country`} className={labelCls}>Country</label>
               <select
                 id={`${uid}-country`}
-                required
                 value={form.country}
                 onChange={(e) => handleCountryChange(e.target.value)}
                 className={selectCls}
               >
-                <option value="">Select country…</option>
+                <option value="">— none —</option>
                 {countries.map((c) => (
                   <option key={c.iso2} value={c.iso2}>{c.name}</option>
                 ))}
@@ -199,7 +211,7 @@ export default function AddEditAccountModal({ account, onClose }: Props) {
           {/* Categorical fields */}
           {categoricalFields.length > 0 && (
             <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">Classification</p>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Classification</p>
               <div className="grid grid-cols-2 gap-3">
                 {categoricalFields.map((def) => (
                   <div key={def.id}>
@@ -221,7 +233,7 @@ export default function AddEditAccountModal({ account, onClose }: Props) {
           {/* Metric fields */}
           {metricFields.length > 0 && (
             <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">Metrics</p>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Metrics</p>
               <div className="grid grid-cols-3 gap-3">
                 {metricFields.map((def) => (
                   <div key={def.id}>
@@ -247,7 +259,7 @@ export default function AddEditAccountModal({ account, onClose }: Props) {
           {/* Text fields */}
           {textFields.length > 0 && (
             <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">Details</p>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Details</p>
               <div className="space-y-3">
                 {textFields.map((def) => (
                   <div key={def.id}>
@@ -265,9 +277,23 @@ export default function AddEditAccountModal({ account, onClose }: Props) {
             </div>
           )}
 
+          {/* Geo assignment */}
+          {territoryEnabled && (
+            <div>
+              <label htmlFor={`${uid}-geo`} className={labelCls}>Geo</label>
+              <GeoPicker
+                id={`${uid}-geo`}
+                value={form.geoNodeId}
+                onChange={(geoNodeId) => setForm((f) => ({ ...f, geoNodeId }))}
+                className={selectCls}
+              />
+              <p className="mt-1 text-[11px] text-slate-400">Optional — if set, takes precedence over country/state for map coloring.</p>
+            </div>
+          )}
+
           {/* Assignment */}
           <div>
-            <label htmlFor={`${uid}-rep`} className={labelCls}>Sales Rep</label>
+            <label htmlFor={`${uid}-rep`} className={labelCls}>{ownerNoun}</label>
             <select
               id={`${uid}-rep`}
               value={form.repId ?? ''}
@@ -283,19 +309,19 @@ export default function AddEditAccountModal({ account, onClose }: Props) {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-2 border-t border-zinc-200 px-5 py-3 dark:border-zinc-700">
+        <div className="flex items-center justify-end gap-2 border-t border-slate-200 px-5 py-3 dark:border-slate-700">
           {error && (
-            <p role="alert" className="mr-auto text-xs text-red-600 dark:text-red-400">{error}</p>
+            <p role="alert" className="mr-auto text-xs text-rose-600 dark:text-rose-400">{error}</p>
           )}
-          <button type="button" onClick={onClose} disabled={submitting} className="rounded-lg px-3 py-1.5 text-sm text-zinc-500 hover:bg-zinc-50 disabled:opacity-50 dark:hover:bg-zinc-800">
+          <button type="button" onClick={onClose} disabled={submitting} className="rounded-lg px-3 py-1.5 text-sm text-slate-500 hover:bg-slate-50 disabled:opacity-50 dark:hover:bg-slate-800">
             Cancel
           </button>
           <button
             type="submit"
-            disabled={!form.name.trim() || !form.country || submitting}
-            className="rounded-lg bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
+            disabled={!form.name.trim() || submitting}
+            className="rounded-lg bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {submitting ? 'Saving…' : account ? 'Save Changes' : 'Add Account'}
+            {submitting ? 'Saving…' : account ? 'Save Changes' : `Add ${entityNoun}`}
           </button>
         </div>
       </form>

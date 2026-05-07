@@ -26,3 +26,5 @@ This is a **Next.js 16** app using the **App Router** with **React 19** and **Ty
 - `public/` — static assets served at `/`.
 
 When adding new routes, create a directory under `app/` with a `page.tsx`. Shared UI should go in a `components/` directory at the repo root (not yet created).
+
+ChatGPT codex will review the code you write.

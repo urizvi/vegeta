@@ -96,18 +96,18 @@ export default function AddSubregionModal({ parentRegion, onClose }: AddSubregio
     <dialog
       ref={dialogRef}
       aria-labelledby="add-subregion-title"
-      className="m-auto w-full max-w-lg rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl backdrop:bg-black/30 dark:border-zinc-700 dark:bg-zinc-900"
+      className="m-auto w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl backdrop:bg-black/30 dark:border-slate-700 dark:bg-slate-900"
       onClose={onClose}
     >
-      <h2 id="add-subregion-title" className="mb-0.5 text-lg font-semibold text-zinc-800 dark:text-zinc-100">
+      <h2 id="add-subregion-title" className="mb-0.5 text-lg font-semibold text-slate-800 dark:text-slate-100">
         New Subregion
       </h2>
-      <p className="mb-4 text-sm text-zinc-400">Within {parentRegion.name}</p>
+      <p className="mb-4 text-sm text-slate-400">Within {parentRegion.name}</p>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         {/* Name */}
         <div>
-          <label htmlFor={`${uid}-name`} className="mb-1 block text-sm font-medium text-zinc-600 dark:text-zinc-400">
+          <label htmlFor={`${uid}-name`} className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-400">
             Subregion Name
           </label>
           <input
@@ -117,20 +117,20 @@ export default function AddSubregionModal({ parentRegion, onClose }: AddSubregio
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g. UK & Ireland"
-            className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
           />
         </div>
 
         {/* Assign to team */}
         <div>
-          <label htmlFor={`${uid}-team`} className="mb-1 block text-sm font-medium text-zinc-600 dark:text-zinc-400">
-            Assign to Team <span className="font-normal text-zinc-400">(optional)</span>
+          <label htmlFor={`${uid}-team`} className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-400">
+            Assign to Team <span className="font-normal text-slate-400">(optional)</span>
           </label>
           <select
             id={`${uid}-team`}
             value={teamId}
             onChange={(e) => setTeamId(e.target.value)}
-            className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
           >
             <option value="">Unassigned</option>
             {teamOrder.map((tid) => {
@@ -148,16 +148,16 @@ export default function AddSubregionModal({ parentRegion, onClose }: AddSubregio
         {/* State / province picker */}
         <div>
           <div className="mb-1.5 flex items-center justify-between">
-            <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
+            <label className="text-sm font-medium text-slate-600 dark:text-slate-400">
               States / Provinces
               {!loading && (
-                <span className="ml-1.5 font-normal text-zinc-400">
+                <span className="ml-1.5 font-normal text-slate-400">
                   ({selected.size} of {allStateCodes.length} selected)
                 </span>
               )}
             </label>
             {!loading && (
-              <button type="button" onClick={toggleAll} className="text-xs text-blue-500 hover:underline">
+              <button type="button" onClick={toggleAll} className="text-xs text-indigo-500 hover:underline">
                 {allSelected ? 'Deselect all' : 'Select all'}
               </button>
             )}
@@ -168,12 +168,12 @@ export default function AddSubregionModal({ parentRegion, onClose }: AddSubregio
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search states / provinces…"
-            className="mb-2 w-full rounded-lg border border-zinc-200 px-3 py-1.5 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+            className="mb-2 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
           />
 
-          <div className="max-h-60 overflow-y-auto rounded-lg border border-zinc-200 dark:border-zinc-700">
+          <div className="max-h-60 overflow-y-auto rounded-lg border border-slate-200 dark:border-slate-700">
             {loading ? (
-              <div className="flex items-center justify-center gap-2 py-8 text-sm text-zinc-400">
+              <div className="flex items-center justify-center gap-2 py-8 text-sm text-slate-400">
                 <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
@@ -181,7 +181,7 @@ export default function AddSubregionModal({ parentRegion, onClose }: AddSubregio
                 Loading states…
               </div>
             ) : filtered.size === 0 ? (
-              <p className="py-4 text-center text-sm text-zinc-400">No states found.</p>
+              <p className="py-4 text-center text-sm text-slate-400">No states found.</p>
             ) : (
               Array.from(filtered.entries()).map(([iso2, states]) => {
                 const allCountryChecked = states.every((s) => selected.has(s.code));
@@ -189,13 +189,13 @@ export default function AddSubregionModal({ parentRegion, onClose }: AddSubregio
                 return (
                   <div key={iso2}>
                     {/* Country header row */}
-                    <label className="flex cursor-pointer items-center gap-2.5 border-b border-zinc-100 bg-zinc-50 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-zinc-500 hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-800/60 dark:hover:bg-zinc-800">
+                    <label className="flex cursor-pointer items-center gap-2.5 border-b border-slate-100 bg-slate-50 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500 hover:bg-slate-100 dark:border-slate-800 dark:bg-slate-800/60 dark:hover:bg-slate-800">
                       <input
                         type="checkbox"
                         checked={allCountryChecked}
                         ref={(el) => { if (el) el.indeterminate = someCountryChecked; }}
                         onChange={() => toggleCountry(iso2)}
-                        className="h-3.5 w-3.5 rounded accent-blue-600"
+                        className="h-3.5 w-3.5 rounded accent-indigo-600"
                       />
                       {iso2} ({states.length})
                     </label>
@@ -203,16 +203,16 @@ export default function AddSubregionModal({ parentRegion, onClose }: AddSubregio
                     {states.map((s) => (
                       <label
                         key={s.code}
-                        className="flex cursor-pointer items-center gap-2.5 px-3 py-1.5 text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                        className="flex cursor-pointer items-center gap-2.5 px-3 py-1.5 text-sm hover:bg-slate-50 dark:hover:bg-slate-800"
                       >
                         <input
                           type="checkbox"
                           checked={selected.has(s.code)}
                           onChange={() => toggle(s.code)}
-                          className="h-3.5 w-3.5 rounded accent-blue-600"
+                          className="h-3.5 w-3.5 rounded accent-indigo-600"
                         />
-                        <span className="flex-1 text-zinc-700 dark:text-zinc-200">{s.name}</span>
-                        <span className="text-xs text-zinc-400">{s.code}</span>
+                        <span className="flex-1 text-slate-700 dark:text-slate-200">{s.name}</span>
+                        <span className="text-xs text-slate-400">{s.code}</span>
                       </label>
                     ))}
                   </div>
@@ -226,14 +226,14 @@ export default function AddSubregionModal({ parentRegion, onClose }: AddSubregio
           <button
             type="submit"
             disabled={!name.trim() || selected.size === 0}
-            className="flex-1 rounded-lg bg-blue-600 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex-1 rounded-lg bg-indigo-600 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40"
           >
             Create Subregion
           </button>
           <button
             type="button"
             onClick={onClose}
-            className="flex-1 rounded-lg border border-zinc-200 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            className="flex-1 rounded-lg border border-slate-200 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
           >
             Cancel
           </button>

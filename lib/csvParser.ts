@@ -67,6 +67,7 @@ export function detectColumn(headers: string[], aliases: string[]): string | und
 const NAME_ALIASES     = ['name', 'account', 'company', 'account name', 'company name', 'account_name', 'company_name'];
 const COUNTRY_ALIASES  = ['country', 'country code', 'country_code', 'iso2', 'iso', 'country_iso'];
 const STATE_ALIASES    = ['state', 'province', 'state/province', 'state_province'];
+const GEO_ALIASES      = ['geo', 'geo node', 'geo_node', 'territory', 'geography', 'region group'];
 const ARR_ALIASES      = ['arr', 'revenue', 'amount', 'annual revenue', 'annual_revenue', 'contract value', 'acv', 'deal value', 'annual contract value'];
 const MRR_ALIASES      = ['mrr', 'monthly revenue', 'monthly_revenue', 'monthly recurring revenue'];
 const HC_ALIASES       = ['headcount', 'employees', 'head count', 'employee count', 'num employees', 'company size'];
@@ -80,6 +81,7 @@ export interface DetectedColumns {
   name?: string;
   country?: string;
   state?: string;
+  geo?: string;
   arr?: string;
   mrr?: string;
   headcount?: string;
@@ -95,6 +97,7 @@ export function detectColumns(headers: string[]): DetectedColumns {
     name:     detectColumn(headers, NAME_ALIASES),
     country:  detectColumn(headers, COUNTRY_ALIASES),
     state:    detectColumn(headers, STATE_ALIASES),
+    geo:      detectColumn(headers, GEO_ALIASES),
     arr:      detectColumn(headers, ARR_ALIASES),
     mrr:      detectColumn(headers, MRR_ALIASES),
     headcount: detectColumn(headers, HC_ALIASES),

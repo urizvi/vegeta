@@ -1,7 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useActiveView, useDrillDownCountryCode, useActions } from '@/hooks/useTerritoryStore';
+import { useModuleEnabled } from '@/hooks/useModuleEnabled';
 import Toolbar from './toolbar/Toolbar';
 import TeamSidebar from './sidebar/TeamSidebar';
 import WorldMapView from './map/WorldMapView';
@@ -9,6 +11,8 @@ import DrillDownMapView from './map/DrillDownMapView';
 import SpreadsheetView from './spreadsheet/SpreadsheetView';
 
 export default function TerritoryApp() {
+  const territoryEnabled = useModuleEnabled('territory');
+  const router = useRouter();
   const activeView = useActiveView();
   const drillDownCode = useDrillDownCountryCode();
   const { setDrillDownCountryCode } = useActions();
@@ -16,13 +20,19 @@ export default function TerritoryApp() {
   // Track the name of the country we drilled into (for breadcrumb)
   const [drillDownName, setDrillDownName] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (!territoryEnabled) router.replace('/accounts');
+  }, [territoryEnabled, router]);
+
+  if (!territoryEnabled) return null;
+
   function handleDrillDown(iso2: string, name: string) {
     setDrillDownName(name);
     setDrillDownCountryCode(iso2);
   }
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-white dark:bg-zinc-950">
+    <div className="flex h-screen flex-col overflow-hidden bg-canvas">
       <Toolbar drillDownCountryName={drillDownCode ? drillDownName : null} />
       <div className="flex flex-1 overflow-hidden">
         <TeamSidebar />

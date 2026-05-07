@@ -1262,6 +1262,13 @@ bundled types lack `projection`; cast added in both map views.
 Verification: `tsc --noEmit`, `eslint`, and `npm run build` all clean.
 Manual UI smoke is user's responsibility.
 
+**Open issue (deferred 2026-05-07):** `MapInfoRail` still obstructs the
+map even after narrowing to 260px, hiding the empty-state region panel,
+and adding a collapse chevron. Revisit with a better placement
+strategy — candidates: dock to bottom edge, slide-out drawer triggered
+by hover/pin, or relocate the region summary out of the rail entirely
+so the rail is only legend + scale + badges.
+
 Original plan notes (kept for traceback): spec envisioned metric pill
 driving choropleth (landed), bbox collision cull for labels (landed),
 right-side summary panel with Geo trail + top-3 (landed), gap/conflict

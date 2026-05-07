@@ -2,83 +2,125 @@
 
 import Link from 'next/link';
 import { useCategoricalFields } from '@/hooks/useTerritoryStore';
+import WorkspaceSwitcher from '@/components/WorkspaceSwitcher';
+import { useEntityNoun } from '@/hooks/useEntityNoun';
+import { useModuleEnabled } from '@/hooks/useModuleEnabled';
+
+type ViewMode = 'table' | 'kanban';
 
 interface Props {
   search:          string;
   filters:         Record<string, string>;
   totalCount:      number;
+  view:            ViewMode;
+  onView:          (v: ViewMode) => void;
   onSearch:        (v: string) => void;
   onFilter:        (patch: Record<string, string>) => void;
   onClearFilters:  () => void;
   onAdd:           () => void;
   onImport:        () => void;
   onManageFields:  () => void;
+  onManageStages:  () => void;
 }
 
+const ghostBtn =
+  'inline-flex items-center gap-1.5 rounded-md border border-hairline bg-panel/60 px-2.5 py-1.5 text-[11px] font-medium text-ink-body transition-all hover:border-hairline-strong hover:bg-panel hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30';
+
+const primaryBtn =
+  'inline-flex items-center gap-1.5 rounded-md bg-brand px-3 py-1.5 text-[11px] font-semibold tracking-tight text-white shadow-brand transition-all hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-1 focus-visible:ring-offset-canvas';
+
+const navLink =
+  'rounded-[7px] px-2.5 py-1 text-[11px] font-medium tracking-tight text-ink-muted transition-colors hover:text-ink';
+const navActive =
+  'rounded-[7px] bg-panel px-2.5 py-1 text-[11px] font-semibold tracking-tight text-ink shadow-xs';
+
 export default function AccountsToolbar({
-  search, filters, totalCount, onSearch, onFilter, onClearFilters, onAdd, onImport, onManageFields,
+  search, filters, totalCount, view, onView, onSearch, onFilter, onClearFilters,
+  onAdd, onImport, onManageFields, onManageStages,
 }: Props) {
   const categoricalFields = useCategoricalFields();
-  const selectCls = 'rounded-lg border border-zinc-200 bg-white py-1.5 pl-2.5 pr-6 text-xs text-zinc-600 outline-none focus:border-blue-400 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300';
+  const entitySingular = useEntityNoun('singular');
+  const entityPlural = useEntityNoun('plural');
+  const territoryEnabled = useModuleEnabled('territory');
+  const tasksEnabled     = useModuleEnabled('tasks');
   const activeCount = Object.values(filters).filter(Boolean).length;
 
   return (
-    <header className="flex flex-col gap-0 border-b border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-950">
-      <div className="flex items-center gap-3 px-4 py-2.5">
-        <span className="text-sm font-bold text-zinc-800 dark:text-zinc-100">Sales Deployment</span>
-        <div className="flex items-center rounded-lg border border-zinc-200 p-0.5 text-xs dark:border-zinc-700">
-          <Link
-            href="/territory"
-            className="rounded-md px-2.5 py-1 font-medium text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+    <header className="relative flex flex-col border-b border-hairline bg-canvas/80 backdrop-blur-md">
+      {/* Top row: brand · workspace · nav · primary actions */}
+      <div className="flex items-center gap-3 px-5 py-3">
+        <Link href="/territory" className="group inline-flex items-center gap-2">
+          <span
+            aria-hidden="true"
+            className="grid h-6 w-6 place-items-center rounded-[7px] bg-gradient-to-br from-brand to-brand-ink text-white shadow-brand"
           >
-            Territory
-          </Link>
-          <span className="rounded-md bg-zinc-900 px-2.5 py-1 font-medium text-white dark:bg-zinc-100 dark:text-zinc-900">
-            Accounts
+            <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="currentColor">
+              <path d="M3 12.5V4.2c0-.4.2-.7.6-.9l4-2.1c.3-.1.5-.1.7 0l4 2.1c.4.2.6.5.6.9v8.3l-2-1V5L8 3.4 5 5v8.5l-2-1z" />
+            </svg>
           </span>
-        </div>
+          <span className="display text-[15px] font-semibold tracking-tight text-ink transition-colors group-hover:text-brand">
+            Vegeta
+          </span>
+          <span className="hidden h-3.5 w-px bg-hairline-strong sm:block" aria-hidden="true" />
+          <span className="hidden text-[11px] font-medium uppercase tracking-[0.14em] text-ink-faint sm:block">
+            Sales Deployment
+          </span>
+        </Link>
+
+        <WorkspaceSwitcher />
+
+        <nav className="ml-1 flex items-center gap-0.5 rounded-[10px] border border-hairline bg-sunken/70 p-0.5">
+          {territoryEnabled && (
+            <Link href="/territory" className={navLink}>Territory</Link>
+          )}
+          <span className={navActive}>{entityPlural}</span>
+          <Link href="/teams" className={navLink}>Teams</Link>
+          {tasksEnabled && (
+            <Link href="/tasks" className={navLink}>Tasks</Link>
+          )}
+        </nav>
 
         <div className="flex-1" />
 
-        <button
-          onClick={onManageFields}
-          className="flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
-          title="Manage custom fields"
-        >
-          Fields
-        </button>
-        <button
-          onClick={onImport}
-          className="flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
-        >
-          Import CSV
-        </button>
-        <button
-          onClick={onAdd}
-          className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
-        >
-          <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="currentColor">
-            <path d="M8 0a.75.75 0 01.75.75v6.5h6.5a.75.75 0 010 1.5h-6.5v6.5a.75.75 0 01-1.5 0v-6.5H.75a.75.75 0 010-1.5h6.5V.75A.75.75 0 018 0z" />
+        <div className="flex items-center gap-0.5 rounded-[10px] border border-hairline bg-sunken/70 p-0.5">
+          {(['table', 'kanban'] as ViewMode[]).map((v) => (
+            <button
+              key={v}
+              onClick={() => onView(v)}
+              className={view === v ? navActive : navLink}
+            >
+              {v === 'table' ? 'Table' : 'Board'}
+            </button>
+          ))}
+        </div>
+
+        <button onClick={onManageStages} className={ghostBtn} title="Manage pipeline stages">Stages</button>
+        <button onClick={onManageFields} className={ghostBtn} title="Manage custom fields">Fields</button>
+        <button onClick={onImport}       className={ghostBtn}>Import</button>
+
+        <button onClick={onAdd} className={primaryBtn}>
+          <svg className="h-3 w-3" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+            <path d="M8 1.5a.75.75 0 01.75.75V7.25h5a.75.75 0 010 1.5h-5v5a.75.75 0 01-1.5 0v-5h-5a.75.75 0 010-1.5h5V2.25A.75.75 0 018 1.5z" />
           </svg>
-          Add Account
+          New {entitySingular.toLowerCase()}
         </button>
       </div>
 
-      <div className="flex items-center gap-2 border-t border-zinc-100 px-4 py-2 dark:border-zinc-800">
+      <div className="flex items-center gap-2 border-t border-hairline px-5 py-2.5">
         <div className="relative">
-          <svg className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" viewBox="0 0 16 16" fill="currentColor">
+          <svg className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-faint" viewBox="0 0 16 16" fill="currentColor">
             <path d="M10.68 11.74a6 6 0 01-7.922-8.982 6 6 0 018.982 7.922l3.04 3.04a.749.749 0 11-1.06 1.06l-3.04-3.04zm-5.44-1.19a4.5 4.5 0 100-9 4.5 4.5 0 000 9z" />
           </svg>
           <input
             value={search}
             onChange={(e) => onSearch(e.target.value)}
-            placeholder="Search accounts…"
-            className="w-52 rounded-lg border border-zinc-200 bg-white py-1.5 pl-8 pr-3 text-xs text-zinc-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
+            placeholder={`Search ${entityPlural.toLowerCase()}…`}
+            className="w-64 rounded-md border border-hairline bg-panel/60 py-1.5 pl-8 pr-3 text-xs text-ink-body outline-none transition-colors placeholder:text-ink-faint hover:border-hairline-strong focus:border-brand/60 focus:bg-panel focus:ring-2 focus:ring-brand/20"
           />
         </div>
 
         {categoricalFields.length > 0 && (
-          <span className="text-zinc-200 dark:text-zinc-700">|</span>
+          <span className="h-4 w-px bg-hairline" aria-hidden="true" />
         )}
 
         {categoricalFields.map((def) => (
@@ -86,7 +128,7 @@ export default function AccountsToolbar({
             key={def.id}
             value={filters[def.id] ?? ''}
             onChange={(e) => onFilter({ [def.id]: e.target.value })}
-            className={selectCls}
+            className="appearance-none rounded-md border border-hairline bg-panel/60 py-1.5 pl-2.5 pr-7 text-[11px] font-medium text-ink-body outline-none transition-colors hover:border-hairline-strong hover:bg-panel focus:border-brand/60 focus:ring-2 focus:ring-brand/20 [background-image:url('data:image/svg+xml;utf8,<svg%20xmlns=%22http://www.w3.org/2000/svg%22%20width=%2210%22%20height=%2210%22%20viewBox=%220%200%2010%2010%22><path%20d=%22M2%204l3%203%203-3%22%20stroke=%22%2397a0b3%22%20stroke-width=%221.4%22%20fill=%22none%22%20stroke-linecap=%22round%22%20stroke-linejoin=%22round%22/></svg>')] [background-position:right_0.5rem_center] [background-repeat:no-repeat] [background-size:10px_10px]"
           >
             <option value="">All {def.label}s</option>
             {(def.options ?? []).map((o) => (
@@ -98,13 +140,17 @@ export default function AccountsToolbar({
         {activeCount > 0 && (
           <button
             onClick={onClearFilters}
-            className="text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+            className="text-[11px] font-medium text-ink-muted transition-colors hover:text-ink"
           >
             Clear filters
           </button>
         )}
 
-        <span className="ml-auto text-xs text-zinc-400">{totalCount} account{totalCount !== 1 ? 's' : ''}</span>
+        <span className="ml-auto inline-flex items-center gap-1.5 text-[11px] text-ink-muted">
+          <span className="h-1.5 w-1.5 rounded-full bg-brand" aria-hidden="true" />
+          <span className="font-mono font-semibold tabular-nums text-ink">{totalCount}</span>
+          <span>{totalCount === 1 ? entitySingular.toLowerCase() : entityPlural.toLowerCase()}</span>
+        </span>
       </div>
     </header>
   );

@@ -1,14 +1,19 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import { useShallow } from 'zustand/react/shallow';
 import { useTerritoryStore } from '@/store/territoryStore';
 import AccountsToolbar from './AccountsToolbar';
 import AccountsTable from './AccountsTable';
+import KanbanBoard from './KanbanBoard';
 import AddEditAccountModal from './AddEditAccountModal';
 import AccountsImportModal from './AccountsImportModal';
 import ManageFieldsModal from './ManageFieldsModal';
+import ManageStagesModal from './ManageStagesModal';
 import type { Account } from '@/types/account';
+
+type ViewMode = 'table' | 'kanban';
 
 export default function AccountsApp() {
   const { accounts, accountOrder, members, teams, teamOrder } = useTerritoryStore(
@@ -21,12 +26,16 @@ export default function AccountsApp() {
     })),
   );
 
-  const [search,     setSearch]     = useState('');
-  const [filters,    setFilters]    = useState<Record<string, string>>({});
-  const [showAdd,    setShowAdd]    = useState(false);
-  const [editingId,  setEditingId]  = useState<string | null>(null);
-  const [showImport, setShowImport] = useState(false);
-  const [showManage, setShowManage] = useState(false);
+  const router = useRouter();
+  const [search,           setSearch]           = useState('');
+  const [filters,          setFilters]          = useState<Record<string, string>>({});
+  const [view,             setView]             = useState<ViewMode>('table');
+  const [showAdd,          setShowAdd]          = useState(false);
+  const [showImport,       setShowImport]       = useState(false);
+  const [showManage,       setShowManage]       = useState(false);
+  const [showManageStages, setShowManageStages] = useState(false);
+
+  const openDetail = (id: string) => router.push(`/accounts/${encodeURIComponent(id)}`);
 
   const filtered = useMemo(() => {
     return accountOrder
@@ -41,43 +50,53 @@ export default function AccountsApp() {
       });
   }, [accountOrder, accounts, search, filters]);
 
-  const editingAccount = editingId ? accounts[editingId] : undefined;
-
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-white dark:bg-zinc-950">
+    <div className="flex h-screen flex-col overflow-hidden bg-canvas">
       <AccountsToolbar
         search={search}
         filters={filters}
         totalCount={filtered.length}
+        view={view}
+        onView={setView}
         onSearch={setSearch}
         onFilter={(patch) => setFilters((f) => ({ ...f, ...patch }))}
         onClearFilters={() => setFilters({})}
         onAdd={() => setShowAdd(true)}
         onImport={() => setShowImport(true)}
         onManageFields={() => setShowManage(true)}
+        onManageStages={() => setShowManageStages(true)}
       />
 
       <main className="flex flex-1 flex-col overflow-hidden">
-        <AccountsTable
-          accounts={filtered}
-          members={members}
-          teams={teams}
-          teamOrder={teamOrder}
-          onEdit={(id) => setEditingId(id)}
-        />
+        {view === 'table' ? (
+          <AccountsTable
+            accounts={filtered}
+            members={members}
+            teams={teams}
+            teamOrder={teamOrder}
+            onEdit={openDetail}
+          />
+        ) : (
+          <KanbanBoard
+            accounts={filtered}
+            members={members}
+            teams={teams}
+            onEdit={openDetail}
+          />
+        )}
       </main>
 
       {showAdd && (
         <AddEditAccountModal onClose={() => setShowAdd(false)} />
-      )}
-      {editingAccount && (
-        <AddEditAccountModal account={editingAccount} onClose={() => setEditingId(null)} />
       )}
       {showImport && (
         <AccountsImportModal onClose={() => setShowImport(false)} />
       )}
       {showManage && (
         <ManageFieldsModal onClose={() => setShowManage(false)} />
+      )}
+      {showManageStages && (
+        <ManageStagesModal onClose={() => setShowManageStages(false)} />
       )}
     </div>
   );

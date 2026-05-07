@@ -1,11 +1,11 @@
-import * as XLSX from 'xlsx';
 import type { FieldDefinition } from './accountFields';
 import { parseCSV } from './csvParser';
 
 // ── Excel / CSV parsing ───────────────────────────────────────────────────────
 
 /** Parse an Excel file (ArrayBuffer) into rows keyed by lowercased header. */
-export function parseExcel(buffer: ArrayBuffer): Record<string, string>[] {
+export async function parseExcel(buffer: ArrayBuffer): Promise<Record<string, string>[]> {
+  const XLSX = await import('xlsx');
   const workbook = XLSX.read(buffer, { type: 'array' });
   const sheetName = workbook.SheetNames[0];
   if (!sheetName) return [];
@@ -35,7 +35,7 @@ export function inferField(
   const label = header; // preserve original casing as the label
   const nonEmpty = values.map((v) => v.trim()).filter(Boolean);
 
-  if (nonEmpty.length === 0) return { label, type: 'text' };
+  if (nonEmpty.length === 0) return { label, type: 'text', entity: 'account' };
 
   // Numeric check
   const hasCurrency = nonEmpty.some((v) => /[$€£¥]/.test(v));
@@ -43,16 +43,16 @@ export function inferField(
     !isNaN(parseFloat(v.replace(/[$€£¥,\s]/g, ''))),
   ).length;
   if (numericCount / nonEmpty.length > 0.8) {
-    return { label, type: 'metric', isCurrency: hasCurrency };
+    return { label, type: 'metric', isCurrency: hasCurrency, entity: 'account' };
   }
 
   // Categorical check — low cardinality, values repeat
   const unique = [...new Set(nonEmpty.map((v) => v))];
   if (unique.length <= 20 && unique.length / nonEmpty.length < 0.4) {
-    return { label, type: 'categorical', options: unique };
+    return { label, type: 'categorical', options: unique, entity: 'account' };
   }
 
-  return { label, type: 'text' };
+  return { label, type: 'text', entity: 'account' };
 }
 
 // ── Column reconciliation ─────────────────────────────────────────────────────

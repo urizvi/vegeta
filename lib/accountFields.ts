@@ -1,22 +1,17 @@
 export type FieldType = 'categorical' | 'metric' | 'text';
 
+export type FieldEntity = 'account' | 'contact' | 'activity' | 'task';
+
 export interface FieldDefinition {
   id: string;
   label: string;
   type: FieldType;
   options?: string[];   // categorical only
   isCurrency?: boolean; // metric only
+  entity: FieldEntity;
+  /** Additive CSV header aliases (lowercased) that auto-map to this field. */
+  aliases?: string[];
 }
-
-export const DEFAULT_FIELD_DEFS: FieldDefinition[] = [
-  { id: 'stage',     label: 'Stage',     type: 'categorical', options: ['Prospect', 'Lead', 'Opportunity', 'Customer', 'Churned'] },
-  { id: 'segment',   label: 'Segment',   type: 'categorical', options: ['SMB', 'Mid-Market', 'Enterprise'] },
-  { id: 'industry',  label: 'Industry',  type: 'categorical', options: ['SaaS', 'FinTech', 'Healthcare', 'E-commerce', 'Manufacturing', 'Education', 'Media', 'Government', 'Other'] },
-  { id: 'tier',      label: 'Tier',      type: 'categorical', options: ['Tier 1', 'Tier 2', 'Tier 3', 'Untiered'] },
-  { id: 'arr',       label: 'ARR',       type: 'metric',      isCurrency: true },
-  { id: 'mrr',       label: 'MRR',       type: 'metric',      isCurrency: true },
-  { id: 'headcount', label: 'Headcount', type: 'metric' },
-];
 
 const OPTION_PALETTE = [
   '#94a3b8', '#60a5fa', '#f59e0b', '#22c55e', '#ef4444',

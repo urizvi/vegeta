@@ -53,7 +53,7 @@ export default function SpreadsheetRow({
   const isManaged = managedBy !== null;  // read-only — assigned through subregion/region
 
   return (
-    <tr className="group border-b border-zinc-100 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-800/40">
+    <tr className="group border-b border-slate-100 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/40">
       {/* Flag / icon */}
       <td className="w-10 py-2.5 pl-4 pr-2 text-center text-lg">
         {entityType === 'country' ? flagEmoji(iso2) : '📍'}
@@ -61,20 +61,20 @@ export default function SpreadsheetRow({
 
       {/* Name */}
       <td className="py-2.5 pr-4">
-        <span className="text-sm font-medium text-zinc-800 dark:text-zinc-100">{entityName}</span>
+        <span className="text-sm font-medium text-slate-800 dark:text-slate-100">{entityName}</span>
         {entityType === 'state' && (
-          <span className="ml-2 text-xs text-zinc-400">{entityCode}</span>
+          <span className="ml-2 text-xs text-slate-400">{entityCode}</span>
         )}
       </td>
 
       {/* Region / Subregion badge */}
       <td className="py-2.5 pr-4">
         {groupLabel ? (
-          <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
             {groupLabel}
           </span>
         ) : (
-          <span className="text-xs text-zinc-400">—</span>
+          <span className="text-xs text-slate-400">—</span>
         )}
       </td>
 
@@ -89,11 +89,11 @@ export default function SpreadsheetRow({
                   className="inline-block h-2.5 w-2.5 flex-shrink-0 rounded-sm"
                   style={{ backgroundColor: assignedTeam.color }}
                 />
-                <span className="text-sm text-zinc-700 dark:text-zinc-200">{assignedTeam.name}</span>
-                <span className="text-xs text-zinc-400">via {managedBy}</span>
+                <span className="text-sm text-slate-700 dark:text-slate-200">{assignedTeam.name}</span>
+                <span className="text-xs text-slate-400">via {managedBy}</span>
               </>
             ) : (
-              <span className="text-xs text-zinc-400">Unassigned</span>
+              <span className="text-xs text-slate-400">Unassigned</span>
             )}
           </div>
         ) : (
@@ -114,7 +114,7 @@ export default function SpreadsheetRow({
                   setAssignment(entityCode, entityType, entityName, e.target.value);
                 }
               }}
-              className="rounded-lg border border-zinc-200 py-1 pl-2 pr-6 text-sm text-zinc-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+              className="rounded-lg border border-slate-200 py-1 pl-2 pr-6 text-sm text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
             >
               <option value="">Unassigned</option>
               {teamOrder.map((id) => {

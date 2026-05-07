@@ -18,13 +18,7 @@ export default function RegionSummaryPanel() {
   const ownerNoun = useOwnerNoun();
   const theme = useMapTheme();
 
-  if (!iso || !rollup) {
-    return (
-      <p className={`${theme.legendTextClass} opacity-60`}>
-        Hover a region to see details.
-      </p>
-    );
-  }
+  if (!iso || !rollup) return null;
 
   const isState = iso.includes(':');
   const filterParam = isState ? `state:${iso}` : `country:${iso}`;

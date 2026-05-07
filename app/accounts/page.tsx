@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import AccountsClient from './AccountsClient';
 
 export const metadata: Metadata = {
-  title: 'Accounts | Sales Deployment',
-  description: 'Manage your account list, classify by stage and segment, and assign sales reps.',
+  title: 'Accounts',
+  description: 'Manage your records, classify by stage and segment, and assign owners.',
 };
 
 export default function AccountsPage() {
