@@ -3,20 +3,17 @@
 import { useState, useCallback, useMemo, useRef, useEffect, memo } from 'react';
 import { ComposableMap, ZoomableGroup, Geographies, Geography, Graticule } from 'react-simple-maps';
 import { useGeoData } from '@/hooks/useGeoData';
-import { useCountryFillColor, useMapTheme, useActions } from '@/hooks/useTerritoryStore';
+import {
+  useChoroplethFillColor, useMapTheme, useActions, useActivePaintGeoId, useActiveEraser,
+  usePinnedEntityIso,
+} from '@/hooks/useTerritoryStore';
+import { useChoroplethScale } from '@/hooks/useChoroplethScale';
 import MapLegend from './MapLegend';
 import MapTooltip from './MapTooltip';
-import AssignPopover from './AssignPopover';
 import { WorldAccountLayer } from './AccountLayer';
 
 interface WorldMapViewProps {
   onDrillDown: (iso2: string, name: string) => void;
-}
-
-interface PopoverState {
-  entityCode: string;
-  entityName: string;
-  position: { x: number; y: number };
 }
 
 // geo from Geographies has svgPath set + all CountryFeature fields spread onto it
@@ -30,17 +27,13 @@ interface EnrichedGeo {
 }
 
 const CountryGeo = memo(function CountryGeo({
-  geo,
-  onClickCountry,
-  unassignedFill,
-  unassignedHover,
-  hoverOpacity,
-  countryStroke,
-  countryStrokeWidth,
-  transition,
+  geo, onClickCountry, scaleMax, choroplethActive,
+  unassignedFill, unassignedHover, hoverOpacity, countryStroke, countryStrokeWidth, transition,
 }: {
   geo: EnrichedGeo;
-  onClickCountry: (entityCode: string, name: string, x: number, y: number) => void;
+  onClickCountry: (entityCode: string, name: string) => void;
+  scaleMax: number;
+  choroplethActive: boolean;
   unassignedFill: string;
   unassignedHover: string;
   hoverOpacity: number;
@@ -49,7 +42,9 @@ const CountryGeo = memo(function CountryGeo({
   transition: string;
 }) {
   const entityCode = geo.iso2 || geo.id;
-  const fill = useCountryFillColor(entityCode);
+  const fill = useChoroplethFillColor(entityCode, scaleMax, choroplethActive);
+  const pinnedIso = usePinnedEntityIso();
+  const isPinned = pinnedIso === entityCode;
   const { setHoveredEntityCode, setHoveredEntityIso } = useActions();
   const isUnassigned = fill === unassignedFill;
 
@@ -57,8 +52,8 @@ const CountryGeo = memo(function CountryGeo({
     <Geography
       geography={geo as unknown as import('react-simple-maps').GeographyFeature}
       fill={fill}
-      stroke={countryStroke}
-      strokeWidth={countryStrokeWidth}
+      stroke={isPinned ? 'var(--color-brand)' : countryStroke}
+      strokeWidth={isPinned ? 1.5 : countryStrokeWidth}
       style={{
         default: { outline: 'none', cursor: 'pointer', transition },
         hover:   { outline: 'none', fill: isUnassigned ? unassignedHover : fill, opacity: hoverOpacity },
@@ -66,15 +61,12 @@ const CountryGeo = memo(function CountryGeo({
       }}
       onMouseEnter={() => { setHoveredEntityCode(geo.name); setHoveredEntityIso(entityCode); }}
       onMouseLeave={() => { setHoveredEntityCode(null); setHoveredEntityIso(null); }}
-      onClick={(e: React.MouseEvent) => onClickCountry(entityCode, geo.name, e.clientX, e.clientY)}
+      onClick={() => onClickCountry(entityCode, geo.name)}
       role="button"
       aria-label={geo.name}
       tabIndex={0}
       onKeyDown={(e: React.KeyboardEvent<SVGPathElement>) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          const r = e.currentTarget.getBoundingClientRect();
-          onClickCountry(entityCode, geo.name, r.left + r.width / 2, r.top + r.height / 2);
-        }
+        if (e.key === 'Enter' || e.key === ' ') onClickCountry(entityCode, geo.name);
       }}
     />
   );
@@ -83,8 +75,13 @@ const CountryGeo = memo(function CountryGeo({
 export default function WorldMapView({ onDrillDown }: WorldMapViewProps) {
   const countries = useGeoData();
   const theme = useMapTheme();
+  const activePaintId = useActivePaintGeoId();
+  const eraserActive = useActiveEraser();
+  const { assignCountryToGeo, clearCountryAssignment } = useActions();
+  const { active: choroplethActive, scale } = useChoroplethScale('world');
+  const scaleMax = scale?.max ?? 0;
+  const { togglePinnedEntityIso, setPinnedEntityIso } = useActions();
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
-  const [popover, setPopover] = useState<PopoverState | null>(null);
   const [zoom, setZoom] = useState(1);
   const zoomRef = useRef(zoom);
   useEffect(() => { zoomRef.current = zoom; }, [zoom]);
@@ -101,19 +98,35 @@ export default function WorldMapView({ onDrillDown }: WorldMapViewProps) {
   }, []);
 
   const handleClickCountry = useCallback(
-    (entityCode: string, name: string, x: number, y: number) => {
-      setPopover({ entityCode, entityName: name, position: { x, y } });
+    (entityCode: string, name: string) => {
+      if (eraserActive) {
+        clearCountryAssignment(entityCode);
+        return;
+      }
+      if (activePaintId) {
+        assignCountryToGeo(activePaintId, entityCode);
+        return;
+      }
+      togglePinnedEntityIso(entityCode);
+      onDrillDown(entityCode, name);
     },
-    [],
+    [eraserActive, clearCountryAssignment, activePaintId, assignCountryToGeo, togglePinnedEntityIso, onDrillDown],
   );
 
+  const handleBackgroundClick = useCallback((e: React.MouseEvent) => {
+    if (e.target === e.currentTarget) setPinnedEntityIso(null);
+  }, [setPinnedEntityIso]);
+
   const isZoomed = zoom > 1.05;
+
+  const cursor = activePaintId || eraserActive ? 'crosshair' : isZoomed ? 'grab' : 'default';
 
   return (
     <div
       className="absolute inset-0"
-      style={{ background: theme.sphereFill, cursor: isZoomed ? 'grab' : 'default' }}
+      style={{ background: theme.sphereFill, cursor }}
       onMouseMove={handleMouseMove}
+      onClick={handleBackgroundClick}
     >
       <ComposableMap
         projection="geoMercator"
@@ -147,6 +160,8 @@ export default function WorldMapView({ onDrillDown }: WorldMapViewProps) {
                   key={geo.rsmKey}
                   geo={geo as unknown as EnrichedGeo}
                   onClickCountry={handleClickCountry}
+                  scaleMax={scaleMax}
+                  choroplethActive={choroplethActive}
                   unassignedFill={theme.unassignedFill}
                   unassignedHover={theme.unassignedHover}
                   hoverOpacity={theme.hoverOpacity}
@@ -161,42 +176,40 @@ export default function WorldMapView({ onDrillDown }: WorldMapViewProps) {
         </ZoomableGroup>
       </ComposableMap>
 
-      {/* Zoom controls */}
-      <div className="absolute right-4 top-4 flex flex-col gap-1">
+      {/* Zoom controls — single rounded panel with internal hairlines */}
+      <div className="absolute right-4 top-4 z-10 flex flex-col overflow-hidden rounded-xl border border-hairline bg-panel/85 shadow-md backdrop-blur-md divide-y divide-hairline">
         <button
           onClick={() => setZoom((z) => Math.min(z * 1.5, 8))}
           className={theme.zoomBtnClass}
           aria-label="Zoom in"
-        >+</button>
+        >
+          <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round">
+            <path d="M8 3v10M3 8h10" />
+          </svg>
+        </button>
         <button
           onClick={() => setZoom((z) => Math.max(z / 1.5, 1))}
           className={theme.zoomBtnClass}
           aria-label="Zoom out"
-        >−</button>
+        >
+          <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round">
+            <path d="M3 8h10" />
+          </svg>
+        </button>
         <button
           onClick={() => { setZoom(1); setCenter([0, 20]); }}
           className={theme.zoomBtnClass}
           aria-label="Reset zoom"
-        >⊙</button>
+        >
+          <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="8" cy="8" r="5" />
+            <circle cx="8" cy="8" r="1.4" fill="currentColor" stroke="none" />
+          </svg>
+        </button>
       </div>
 
       <MapLegend />
       <MapTooltip mousePos={mousePos} />
-
-      {popover && (
-        <AssignPopover
-          entityCode={popover.entityCode}
-          entityName={popover.entityName}
-          entityType="country"
-          position={popover.position}
-          onClose={() => setPopover(null)}
-          onDrillDown={
-            popover.entityCode
-              ? () => { onDrillDown(popover.entityCode, popover.entityName); setPopover(null); }
-              : undefined
-          }
-        />
-      )}
     </div>
   );
 }
