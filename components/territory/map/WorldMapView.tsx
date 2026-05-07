@@ -1,16 +1,18 @@
 'use client';
 
 import { useState, useCallback, useMemo, useRef, useEffect, memo } from 'react';
-import { ComposableMap, ZoomableGroup, Geographies, Geography, Graticule } from 'react-simple-maps';
+import { ComposableMap, ZoomableGroup, Geographies, Geography, Graticule, type GeographyFeature } from 'react-simple-maps';
+import type { GeoProjection } from 'd3-geo';
 import { useGeoData } from '@/hooks/useGeoData';
 import {
   useChoroplethFillColor, useMapTheme, useActions, useActivePaintGeoId, useActiveEraser,
-  usePinnedEntityIso, useEntityHighlight,
+  usePinnedEntityIso, useEntityHighlight, useShowLabels,
 } from '@/hooks/useTerritoryStore';
 import { useChoroplethScale } from '@/hooks/useChoroplethScale';
 import MapInfoRail from './MapInfoRail';
 import MapTooltip from './MapTooltip';
 import { WorldAccountLayer } from './AccountLayer';
+import MapLabels from './MapLabels';
 
 interface WorldMapViewProps {
   onDrillDown: (iso2: string, name: string) => void;
@@ -79,6 +81,7 @@ export default function WorldMapView({ onDrillDown }: WorldMapViewProps) {
   const activePaintId = useActivePaintGeoId();
   const eraserActive = useActiveEraser();
   const { assignCountryToGeo, clearCountryAssignment } = useActions();
+  const showLabels = useShowLabels();
   const { active: choroplethActive, scale } = useChoroplethScale('world');
   const scaleMax = scale?.max ?? 0;
   const { togglePinnedEntityIso, setPinnedEntityIso, clearHighlight } = useActions();
@@ -165,23 +168,35 @@ export default function WorldMapView({ onDrillDown }: WorldMapViewProps) {
             <Graticule stroke={theme.graticuleStroke} strokeWidth={theme.graticuleWidth} step={[20, 20]} />
           )}
           <Geographies geography={featureCollection}>
-            {({ geographies }) =>
-              geographies.map((geo) => (
-                <CountryGeo
-                  key={geo.rsmKey}
-                  geo={geo as unknown as EnrichedGeo}
-                  onClickCountry={handleClickCountry}
-                  scaleMax={scaleMax}
-                  choroplethActive={choroplethActive}
-                  unassignedFill={theme.unassignedFill}
-                  unassignedHover={theme.unassignedHover}
-                  hoverOpacity={theme.hoverOpacity}
-                  countryStroke={theme.countryStroke}
-                  countryStrokeWidth={theme.countryStrokeWidth}
-                  transition={theme.transition}
-                />
-              ))
-            }
+            {(args) => {
+              const { geographies, projection } = args as unknown as { geographies: GeographyFeature[]; projection: GeoProjection };
+              return (
+                <>
+                  {geographies.map((geo) => (
+                    <CountryGeo
+                      key={geo.rsmKey}
+                      geo={geo as unknown as EnrichedGeo}
+                      onClickCountry={handleClickCountry}
+                      scaleMax={scaleMax}
+                      choroplethActive={choroplethActive}
+                      unassignedFill={theme.unassignedFill}
+                      unassignedHover={theme.unassignedHover}
+                      hoverOpacity={theme.hoverOpacity}
+                      countryStroke={theme.countryStroke}
+                      countryStrokeWidth={theme.countryStrokeWidth}
+                      transition={theme.transition}
+                    />
+                  ))}
+                  {showLabels && (
+                    <MapLabels
+                      geographies={geographies as unknown as { rsmKey: string; name: string; geometry: unknown }[]}
+                      projection={projection}
+                      zoom={zoom}
+                    />
+                  )}
+                </>
+              );
+            }}
           </Geographies>
           <WorldAccountLayer zoom={zoom} />
         </ZoomableGroup>

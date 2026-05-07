@@ -1,18 +1,20 @@
 'use client';
 
 import { useState, useCallback, useMemo, memo, useEffect } from 'react';
-import { ComposableMap, ZoomableGroup, Geographies, Geography, Graticule } from 'react-simple-maps';
+import { ComposableMap, ZoomableGroup, Geographies, Geography, Graticule, type GeographyFeature } from 'react-simple-maps';
+import type { GeoProjection } from 'd3-geo';
 import { geoMercator, geoPath } from 'd3-geo';
 import { useCountryStates } from '@/hooks/useCountryStates';
 import type { StateFeature } from '@/hooks/useCountryStates';
 import {
   useChoroplethFillColor, useMapTheme, useActions, useActivePaintGeoId, useActiveEraser,
-  usePinnedEntityIso, useEntityHighlight,
+  usePinnedEntityIso, useEntityHighlight, useShowLabels,
 } from '@/hooks/useTerritoryStore';
 import { useChoroplethScale } from '@/hooks/useChoroplethScale';
 import { DrillDownAccountLayer } from './AccountLayer';
 import MapInfoRail from './MapInfoRail';
 import MapTooltip from './MapTooltip';
+import MapLabels from './MapLabels';
 
 interface DrillDownMapViewProps {
   countryIso2: string;
@@ -108,6 +110,7 @@ export default function DrillDownMapView({ countryIso2, countryName }: DrillDown
   const activePaintId = useActivePaintGeoId();
   const eraserActive = useActiveEraser();
   const { assignStateToGeo, clearStateAssignment } = useActions();
+  const showLabels = useShowLabels();
   const { active: choroplethActive, scale } = useChoroplethScale('drilldown', countryIso2);
   const scaleMax = scale?.max ?? 0;
   const { togglePinnedEntityIso, setPinnedEntityIso, clearHighlight } = useActions();
@@ -239,23 +242,35 @@ export default function DrillDownMapView({ countryIso2, countryName }: DrillDown
             <Graticule stroke={theme.graticuleStroke} strokeWidth={theme.graticuleWidth} step={[20, 20]} />
           )}
           <Geographies geography={featureCollection}>
-            {({ geographies }) =>
-              geographies.map((geo) => (
-                <StateGeo
-                  key={geo.rsmKey}
-                  geo={geo as unknown as EnrichedStateGeo}
-                  onClickState={handleClickState}
-                  scaleMax={scaleMax}
-                  choroplethActive={choroplethActive}
-                  unassignedFill={theme.unassignedFill}
-                  unassignedHover={theme.unassignedHover}
-                  hoverOpacity={theme.hoverOpacity}
-                  stateStroke={theme.stateStroke}
-                  stateStrokeWidth={theme.stateStrokeWidth * 0.25}
-                  transition={theme.transition}
-                />
-              ))
-            }
+            {(args) => {
+              const { geographies, projection } = args as unknown as { geographies: GeographyFeature[]; projection: GeoProjection };
+              return (
+                <>
+                  {geographies.map((geo) => (
+                    <StateGeo
+                      key={geo.rsmKey}
+                      geo={geo as unknown as EnrichedStateGeo}
+                      onClickState={handleClickState}
+                      scaleMax={scaleMax}
+                      choroplethActive={choroplethActive}
+                      unassignedFill={theme.unassignedFill}
+                      unassignedHover={theme.unassignedHover}
+                      hoverOpacity={theme.hoverOpacity}
+                      stateStroke={theme.stateStroke}
+                      stateStrokeWidth={theme.stateStrokeWidth * 0.25}
+                      transition={theme.transition}
+                    />
+                  ))}
+                  {showLabels && (
+                    <MapLabels
+                      geographies={geographies as unknown as { rsmKey: string; name: string; geometry: unknown }[]}
+                      projection={projection}
+                      zoom={zoom}
+                    />
+                  )}
+                </>
+              );
+            }}
           </Geographies>
           <DrillDownAccountLayer countryIso2={countryIso2} features={features} zoom={zoom} />
         </ZoomableGroup>
