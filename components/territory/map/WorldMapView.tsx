@@ -8,7 +8,7 @@ import {
   usePinnedEntityIso,
 } from '@/hooks/useTerritoryStore';
 import { useChoroplethScale } from '@/hooks/useChoroplethScale';
-import MapLegend from './MapLegend';
+import MapInfoRail from './MapInfoRail';
 import MapTooltip from './MapTooltip';
 import { WorldAccountLayer } from './AccountLayer';
 
@@ -208,7 +208,7 @@ export default function WorldMapView({ onDrillDown }: WorldMapViewProps) {
         </button>
       </div>
 
-      <MapLegend />
+      <MapInfoRail view="world" />
       <MapTooltip mousePos={mousePos} />
     </div>
   );
