@@ -1275,6 +1275,73 @@ right-side summary panel with Geo trail + top-3 (landed), gap/conflict
 badges with click-to-highlight (landed as transient highlight),
 gradient bar with min/max numerals (landed as `ChoroplethScale`).
 
+**Sub-project 3 (shipped 2026-05-07) — Map interaction & navigation.**
+
+Spec: `docs/superpowers/specs/2026-05-07-territory-map-interaction-design.md`.
+Plan: `docs/superpowers/plans/2026-05-07-territory-map-interaction.md`.
+
+What shipped (commits `990633c` → `5c7b520` on `accounts-crud`):
+
+- **State**: new `selectActive` flag on `geoSlice` with three-way mutual
+  exclusion (paint/eraser/select). New `selectionSlice` holds
+  `selectedEntityCodes: string[]` (countries `'US'` and states
+  `'US:US-CA'` share one set; session-only, not persisted). New
+  `mapZoomCommand` discriminated union on `mapUiSlice` (`panBy` |
+  `zoomBy` | `reset`, each with a `nonce`) bridges Toolbar keystrokes
+  to the active map view.
+- **Toolbar**: third "Select" pill alongside paint/eraser. `?` button
+  toggles `MapHelpPopover` (always reachable, outside the paint/eraser
+  guard). Existing keydown listener extended with the full cascade —
+  Esc (popover → selection → paint/eraser), `?`, arrow/+/-/0
+  keystrokes dispatching `setMapZoomCommand`.
+- **WorldMapView / DrillDownMapView**: selection-aware stroke (2px
+  brand) + 4% brand fill overlay via `color-mix`. Click handler routes
+  cmd/ctrl-click → `toggleSelection`, shift-click → `addToSelection`,
+  plain → `setSelection` when `selectActive`. Lasso overlay
+  (mousedown-on-background-only) draws a dashed brand `<rect>` and on
+  release runs a centroid-in-rect hit test using d3-geo `geoCentroid`
+  (already a transitive dep). Pinch zoom enabled via explicit
+  `filterZoomEvent` (wheel/dblclick always allowed; mousedown-pan
+  gated to zoomed). Double-click zooms to feature centroid with
+  `e.stopPropagation()` so ZoomableGroup's own dblclick doesn't
+  double-fire. `useEffect` consumer reads `mapZoomCommand` (via
+  state-mirroring refs to satisfy `react-hooks/set-state-in-effect`)
+  and applies pan/zoom/reset, then clears the command. Roving
+  tabindex (alphabetically-first region gets `tabIndex={0}`,
+  rest `-1`) plus a `.map-region-path:focus-visible` ring in
+  `globals.css`. Cursor states: paint/eraser → `crosshair`, select →
+  `cell`, zoomed-no-tool → `grab`.
+- **MapHelpPopover** (`components/territory/map/MapHelpPopover.tsx`):
+  small dialog listing the 8 shortcut rows; closes on outside-click
+  (Esc handled by Toolbar's cascade).
+
+Implementation deviations from the plan:
+- DrillDownMapView's `filterZoomEvent` and zoom-command consumer use
+  `initialZoom * 1.05`, the file's existing zoom-detection idiom, and
+  cap zoom at the file's existing `maxZoom = 80` (vs. World's `8`).
+  Reset returns to fitted `center`/`initialZoom`, not `[0, 20]/1`.
+- Zoom-command consumer reads from `*Ref` mirrors of state because
+  ESLint's `react-hooks/set-state-in-effect` rejects reading closure
+  state at command time. Functional behavior is identical; the nonce
+  on each command still re-fires the effect.
+- `selectActive` is consumed only by parent components (drives the
+  cursor ternary); it is NOT passed into `CountryGeo`/`StateGeo` (the
+  per-region children don't need it).
+- `useTerritoryStore` barrel was extended once (Task 5) to re-export
+  `selectionSelectors`. `useSelectionCount` was imported directly
+  from `selectionSelectors` (not added to the barrel).
+
+Out of scope (deferred to a future polish pass): animated drill-down
+↔ world transition (sub-project umbrella item B), pan momentum +
+rubber-band edges, native iPad/Safari touch gestures, surfacing
+"N regions selected" in `RegionSummaryPanel`, `/` to focus search,
+`g` to focus Geos sidebar.
+
+Verification: `npm run lint` and `npm run build` both clean. Manual
+UI smoke is the user's responsibility (per the plan's checklist).
+
+### Original plan notes (kept for traceback)
+
 **Sub-project 3 — Map interaction & navigation.**
 Goal: tactile, modern manipulation that mirrors what users expect
 from Linear/Figma-class tools.
