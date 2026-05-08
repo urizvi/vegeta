@@ -9,7 +9,7 @@ import type { StateFeature } from '@/hooks/useCountryStates';
 import {
   useChoroplethFillColor, useMapTheme, useActions, useActivePaintGeoId, useActiveEraser,
   usePinnedEntityIso, useEntityHighlight, useShowLabels,
-  useActiveSelect, useSelectedEntityCodes,
+  useActiveSelect, useSelectedEntityCodes, useMapZoomCommand,
 } from '@/hooks/useTerritoryStore';
 import { useChoroplethScale } from '@/hooks/useChoroplethScale';
 import { DrillDownAccountLayer } from './AccountLayer';
@@ -133,6 +133,8 @@ export default function DrillDownMapView({ countryIso2, countryName }: DrillDown
   const { active: choroplethActive, scale } = useChoroplethScale('drilldown', countryIso2);
   const scaleMax = scale?.max ?? 0;
   const { togglePinnedEntityIso, setPinnedEntityIso, clearHighlight } = useActions();
+  const zoomCommand = useMapZoomCommand();
+  const { setMapZoomCommand } = useActions();
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -144,6 +146,7 @@ export default function DrillDownMapView({ countryIso2, countryName }: DrillDown
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [clearHighlight, setPinnedEntityIso]);
+
   const [lasso, setLasso] = useState<{ x0: number; y0: number; x1: number; y1: number; shift: boolean } | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const projectionRef = useRef<GeoProjection | null>(null);
@@ -164,6 +167,14 @@ export default function DrillDownMapView({ countryIso2, countryName }: DrillDown
   const zoomRef = useRef(zoom);
   useEffect(() => { zoomRef.current = zoom; }, [zoom]);
   const [currentCenter, setCurrentCenter] = useState<[number, number]>(center);
+  const currentCenterRef = useRef<[number, number]>(currentCenter);
+  useEffect(() => { currentCenterRef.current = currentCenter; }, [currentCenter]);
+  const initialZoomRef = useRef(initialZoom);
+  useEffect(() => { initialZoomRef.current = initialZoom; }, [initialZoom]);
+  const centerRef = useRef<[number, number]>(center);
+  useEffect(() => { centerRef.current = center; }, [center]);
+  const mapHeightRef = useRef(mapHeight);
+  useEffect(() => { mapHeightRef.current = mapHeight; }, [mapHeight]);
   // getDerivedStateFromProps: reset zoom + center when country/features change
   if (prevInitialZoom !== initialZoom || prevCenter[0] !== center[0] || prevCenter[1] !== center[1]) {
     setPrevInitialZoom(initialZoom);
@@ -171,6 +182,24 @@ export default function DrillDownMapView({ countryIso2, countryName }: DrillDown
     setZoom(initialZoom);
     setCurrentCenter(center);
   }
+
+  useEffect(() => {
+    if (!zoomCommand) return;
+    if (zoomCommand.kind === 'panBy') {
+      const [lng, lat] = currentCenterRef.current;
+      const z = zoomRef.current;
+      const h = mapHeightRef.current;
+      const dLng = (zoomCommand.dx * 360) / (MAP_W * z);
+      const dLat = (zoomCommand.dy * 180) / (h * z);
+      setCurrentCenter([lng - dLng, lat + dLat]);
+    } else if (zoomCommand.kind === 'zoomBy') {
+      setZoom((z) => Math.min(Math.max(z * zoomCommand.factor, initialZoomRef.current), 80));
+    } else if (zoomCommand.kind === 'reset') {
+      setZoom(initialZoomRef.current);
+      setCurrentCenter(centerRef.current);
+    }
+    setMapZoomCommand(null);
+  }, [zoomCommand, setMapZoomCommand]);
 
   // Stable reference for Geographies
   const featureCollection = useMemo(

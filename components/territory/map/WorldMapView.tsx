@@ -8,7 +8,7 @@ import { useGeoData } from '@/hooks/useGeoData';
 import {
   useChoroplethFillColor, useMapTheme, useActions, useActivePaintGeoId, useActiveEraser,
   usePinnedEntityIso, useEntityHighlight, useShowLabels,
-  useActiveSelect, useSelectedEntityCodes,
+  useActiveSelect, useSelectedEntityCodes, useMapZoomCommand,
 } from '@/hooks/useTerritoryStore';
 import { useChoroplethScale } from '@/hooks/useChoroplethScale';
 import MapInfoRail from './MapInfoRail';
@@ -103,10 +103,15 @@ export default function WorldMapView({ onDrillDown }: WorldMapViewProps) {
   const { active: choroplethActive, scale } = useChoroplethScale('world');
   const scaleMax = scale?.max ?? 0;
   const { togglePinnedEntityIso, setPinnedEntityIso, clearHighlight } = useActions();
+  const zoomCommand = useMapZoomCommand();
+  const { setMapZoomCommand } = useActions();
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const zoomRef = useRef(zoom);
   useEffect(() => { zoomRef.current = zoom; }, [zoom]);
+  const [center, setCenter] = useState<[number, number]>([0, 20]);
+  const centerRef = useRef<[number, number]>(center);
+  useEffect(() => { centerRef.current = center; }, [center]);
   const [lasso, setLasso] = useState<{ x0: number; y0: number; x1: number; y1: number; shift: boolean } | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const projectionRef = useRef<GeoProjection | null>(null);
@@ -121,7 +126,24 @@ export default function WorldMapView({ onDrillDown }: WorldMapViewProps) {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [clearHighlight, setPinnedEntityIso]);
-  const [center, setCenter] = useState<[number, number]>([0, 20]);
+
+  useEffect(() => {
+    if (!zoomCommand) return;
+    if (zoomCommand.kind === 'panBy') {
+      // ~1 viewBox px ≈ (360 / (980 * zoom)) deg of longitude near equator.
+      const [lng, lat] = centerRef.current;
+      const z = zoomRef.current;
+      const dLng = (zoomCommand.dx * 360) / (980 * z);
+      const dLat = (zoomCommand.dy * 180) / (551 * z);
+      setCenter([lng - dLng, lat + dLat]);
+    } else if (zoomCommand.kind === 'zoomBy') {
+      setZoom((z) => Math.min(Math.max(z * zoomCommand.factor, 1), 8));
+    } else if (zoomCommand.kind === 'reset') {
+      setZoom(1);
+      setCenter([0, 20]);
+    }
+    setMapZoomCommand(null);
+  }, [zoomCommand, setMapZoomCommand]);
 
   // Stable reference — Geographies re-runs its effect whenever this changes
   const featureCollection = useMemo(
