@@ -216,3 +216,9 @@ body > * { position: relative; z-index: 1; }
   border: 2px solid transparent;
 }
 *::-webkit-scrollbar-track { background: transparent; }
+
+/* Territory map focus ring — Sub-project 3 */
+.map-region-path:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 1px;
+}

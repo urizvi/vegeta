@@ -44,6 +44,7 @@ const StateGeo = memo(function StateGeo({
   stateStroke,
   stateStrokeWidth,
   transition,
+  isTabFocus,
 }: {
   geo: EnrichedStateGeo;
   onClickState: (entityCode: string, e: React.MouseEvent) => void;
@@ -57,6 +58,7 @@ const StateGeo = memo(function StateGeo({
   stateStroke: string;
   stateStrokeWidth: number;
   transition: string;
+  isTabFocus: boolean;
 }) {
   const entityCode = `${geo.iso2}:${geo.id}`;
   const fill = useChoroplethFillColor(entityCode, scaleMax, choroplethActive);
@@ -72,15 +74,15 @@ const StateGeo = memo(function StateGeo({
       fill={fill}
       stroke={isSelected ? 'var(--color-brand)' : isHighlighted ? 'var(--color-brand)' : isPinned ? 'var(--color-brand)' : stateStroke}
       strokeWidth={isSelected ? 2 : isHighlighted ? 2 : isPinned ? 1.5 : stateStrokeWidth}
+      className="map-region-path"
       style={{
         default: {
-          outline: 'none',
           cursor: 'pointer',
           transition,
           ...(isSelected ? { fill: `color-mix(in srgb, var(--color-brand) 4%, ${fill})` } : {}),
         },
-        hover:   { outline: 'none', fill: isUnassigned ? unassignedHover : fill, opacity: hoverOpacity },
-        pressed: { outline: 'none' },
+        hover:   { fill: isUnassigned ? unassignedHover : fill, opacity: hoverOpacity },
+        pressed: {},
       }}
       onMouseEnter={() => { setHoveredEntityCode(`${geo.name} (${geo.id})`); setHoveredEntityIso(entityCode); }}
       onMouseLeave={() => { setHoveredEntityCode(null); setHoveredEntityIso(null); }}
@@ -91,7 +93,7 @@ const StateGeo = memo(function StateGeo({
       }}
       role="button"
       aria-label={geo.name}
-      tabIndex={0}
+      tabIndex={isTabFocus ? 0 : -1}
       onKeyDown={(e: React.KeyboardEvent<SVGPathElement>) => {
         if (e.key === 'Enter' || e.key === ' ') {
           onClickState(entityCode, { metaKey: e.metaKey, ctrlKey: e.ctrlKey, shiftKey: e.shiftKey } as React.MouseEvent);
@@ -200,6 +202,13 @@ export default function DrillDownMapView({ countryIso2, countryName }: DrillDown
     }
     setMapZoomCommand(null);
   }, [zoomCommand, setMapZoomCommand]);
+
+  const firstFocusableCode = useMemo(() => {
+    const codes = features
+      .map((s) => `${(s as unknown as EnrichedStateGeo).iso2}:${(s as unknown as EnrichedStateGeo).id}`)
+      .sort();
+    return codes[0] ?? null;
+  }, [features]);
 
   // Stable reference for Geographies
   const featureCollection = useMemo(
@@ -342,7 +351,10 @@ export default function DrillDownMapView({ countryIso2, countryName }: DrillDown
   }
 
   const isZoomed = zoom > initialZoom * 1.05;
-  const cursor = activePaintId || eraserActive ? 'crosshair' : isZoomed ? 'grab' : 'default';
+  const cursor =
+    activePaintId || eraserActive ? 'crosshair' :
+    selectActive ? 'cell' :
+    isZoomed ? 'grab' : 'default';
 
   return (
     <div
@@ -412,6 +424,7 @@ export default function DrillDownMapView({ countryIso2, countryName }: DrillDown
                         stateStroke={theme.stateStroke}
                         stateStrokeWidth={theme.stateStrokeWidth * 0.25}
                         transition={theme.transition}
+                        isTabFocus={entityCode === firstFocusableCode}
                       />
                     );
                   })}

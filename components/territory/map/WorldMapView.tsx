@@ -33,6 +33,7 @@ interface EnrichedGeo {
 const CountryGeo = memo(function CountryGeo({
   geo, onClickCountry, onDoubleClickFeature, isSelected, scaleMax, choroplethActive,
   unassignedFill, unassignedHover, hoverOpacity, countryStroke, countryStrokeWidth, transition,
+  isTabFocus,
 }: {
   geo: EnrichedGeo;
   onClickCountry: (entityCode: string, name: string, e: React.MouseEvent) => void;
@@ -46,6 +47,7 @@ const CountryGeo = memo(function CountryGeo({
   countryStroke: string;
   countryStrokeWidth: number;
   transition: string;
+  isTabFocus: boolean;
 }) {
   const entityCode = geo.iso2 || geo.id;
   const fill = useChoroplethFillColor(entityCode, scaleMax, choroplethActive);
@@ -61,15 +63,15 @@ const CountryGeo = memo(function CountryGeo({
       fill={fill}
       stroke={isSelected ? 'var(--color-brand)' : isHighlighted ? 'var(--color-brand)' : isPinned ? 'var(--color-brand)' : countryStroke}
       strokeWidth={isSelected ? 2 : isHighlighted ? 2 : isPinned ? 1.5 : countryStrokeWidth}
+      className="map-region-path"
       style={{
         default: {
-          outline: 'none',
           cursor: 'pointer',
           transition,
           ...(isSelected ? { fill: `color-mix(in srgb, var(--color-brand) 4%, ${fill})` } : {}),
         },
-        hover:   { outline: 'none', fill: isUnassigned ? unassignedHover : fill, opacity: hoverOpacity },
-        pressed: { outline: 'none' },
+        hover:   { fill: isUnassigned ? unassignedHover : fill, opacity: hoverOpacity },
+        pressed: {},
       }}
       onMouseEnter={() => { setHoveredEntityCode(geo.name); setHoveredEntityIso(entityCode); }}
       onMouseLeave={() => { setHoveredEntityCode(null); setHoveredEntityIso(null); }}
@@ -80,7 +82,7 @@ const CountryGeo = memo(function CountryGeo({
       }}
       role="button"
       aria-label={geo.name}
-      tabIndex={0}
+      tabIndex={isTabFocus ? 0 : -1}
       onKeyDown={(e: React.KeyboardEvent<SVGPathElement>) => {
         if (e.key === 'Enter' || e.key === ' ') {
           onClickCountry(entityCode, geo.name, { metaKey: e.metaKey, ctrlKey: e.ctrlKey, shiftKey: e.shiftKey } as React.MouseEvent);
@@ -144,6 +146,13 @@ export default function WorldMapView({ onDrillDown }: WorldMapViewProps) {
     }
     setMapZoomCommand(null);
   }, [zoomCommand, setMapZoomCommand]);
+
+  const firstFocusableCode = useMemo(() => {
+    const codes = countries
+      .map((c) => (c as unknown as EnrichedGeo).iso2 || (c as unknown as EnrichedGeo).id)
+      .sort();
+    return codes[0] ?? null;
+  }, [countries]);
 
   // Stable reference — Geographies re-runs its effect whenever this changes
   const featureCollection = useMemo(
@@ -257,7 +266,10 @@ export default function WorldMapView({ onDrillDown }: WorldMapViewProps) {
 
   const isZoomed = zoom > 1.05;
 
-  const cursor = activePaintId || eraserActive ? 'crosshair' : isZoomed ? 'grab' : 'default';
+  const cursor =
+    activePaintId || eraserActive ? 'crosshair' :
+    selectActive ? 'cell' :
+    isZoomed ? 'grab' : 'default';
 
   return (
     <div
@@ -321,6 +333,7 @@ export default function WorldMapView({ onDrillDown }: WorldMapViewProps) {
                         countryStroke={theme.countryStroke}
                         countryStrokeWidth={theme.countryStrokeWidth}
                         transition={theme.transition}
+                        isTabFocus={entityCode === firstFocusableCode}
                       />
                     );
                   })}
