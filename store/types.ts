@@ -11,6 +11,7 @@ import type { PipelineStagesSlice } from './slices/pipelineStagesSlice';
 import type { ContactsSlice } from './slices/contactsSlice';
 import type { ActivitiesSlice } from './slices/activitiesSlice';
 import type { TasksSlice } from './slices/tasksSlice';
+import type { SelectionSlice } from './slices/selectionSlice';
 
 export interface RootActions {
   exportState: () => string;
@@ -31,4 +32,5 @@ export type TerritoryStore =
   & ContactsSlice
   & ActivitiesSlice
   & TasksSlice
+  & SelectionSlice
   & RootActions;

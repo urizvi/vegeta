@@ -14,6 +14,7 @@ import { createPipelineStagesSlice, pipelineStagesPersistKeys } from './slices/p
 import { createContactsSlice, contactsPersistKeys } from './slices/contactsSlice';
 import { createActivitiesSlice, activitiesPersistKeys } from './slices/activitiesSlice';
 import { createTasksSlice, tasksPersistKeys } from './slices/tasksSlice';
+import { createSelectionSlice } from './slices/selectionSlice';
 import type { TerritoryStore } from './types';
 
 export type { TerritoryStore } from './types';
@@ -53,6 +54,7 @@ export const useTerritoryStore = create<TerritoryStore>()((...a) => {
     ...createContactsSlice(...a),
     ...createActivitiesSlice(...a),
     ...createTasksSlice(...a),
+    ...createSelectionSlice(...a),
 
     exportState() {
       const state = get();
