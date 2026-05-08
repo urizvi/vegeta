@@ -9,6 +9,7 @@ import type { StateFeature } from '@/hooks/useCountryStates';
 import {
   useChoroplethFillColor, useMapTheme, useActions, useActivePaintGeoId, useActiveEraser,
   usePinnedEntityIso, useEntityHighlight, useShowLabels,
+  useActiveSelect, useSelectedEntityCodes,
 } from '@/hooks/useTerritoryStore';
 import { useChoroplethScale } from '@/hooks/useChoroplethScale';
 import { DrillDownAccountLayer } from './AccountLayer';
@@ -33,6 +34,7 @@ interface EnrichedStateGeo {
 const StateGeo = memo(function StateGeo({
   geo,
   onClickState,
+  isSelected,
   scaleMax,
   choroplethActive,
   unassignedFill,
@@ -43,7 +45,8 @@ const StateGeo = memo(function StateGeo({
   transition,
 }: {
   geo: EnrichedStateGeo;
-  onClickState: (entityCode: string) => void;
+  onClickState: (entityCode: string, e: React.MouseEvent) => void;
+  isSelected: boolean;
   scaleMax: number;
   choroplethActive: boolean;
   unassignedFill: string;
@@ -65,21 +68,28 @@ const StateGeo = memo(function StateGeo({
     <Geography
       geography={geo as unknown as import('react-simple-maps').GeographyFeature}
       fill={fill}
-      stroke={isHighlighted ? 'var(--color-brand)' : isPinned ? 'var(--color-brand)' : stateStroke}
-      strokeWidth={isHighlighted ? 2 : isPinned ? 1.5 : stateStrokeWidth}
+      stroke={isSelected ? 'var(--color-brand)' : isHighlighted ? 'var(--color-brand)' : isPinned ? 'var(--color-brand)' : stateStroke}
+      strokeWidth={isSelected ? 2 : isHighlighted ? 2 : isPinned ? 1.5 : stateStrokeWidth}
       style={{
-        default: { outline: 'none', cursor: 'pointer', transition },
+        default: {
+          outline: 'none',
+          cursor: 'pointer',
+          transition,
+          ...(isSelected ? { fill: `color-mix(in srgb, var(--color-brand) 4%, ${fill})` } : {}),
+        },
         hover:   { outline: 'none', fill: isUnassigned ? unassignedHover : fill, opacity: hoverOpacity },
         pressed: { outline: 'none' },
       }}
       onMouseEnter={() => { setHoveredEntityCode(`${geo.name} (${geo.id})`); setHoveredEntityIso(entityCode); }}
       onMouseLeave={() => { setHoveredEntityCode(null); setHoveredEntityIso(null); }}
-      onClick={() => onClickState(entityCode)}
+      onClick={(e: React.MouseEvent<SVGPathElement>) => onClickState(entityCode, e)}
       role="button"
       aria-label={geo.name}
       tabIndex={0}
       onKeyDown={(e: React.KeyboardEvent<SVGPathElement>) => {
-        if (e.key === 'Enter' || e.key === ' ') onClickState(entityCode);
+        if (e.key === 'Enter' || e.key === ' ') {
+          onClickState(entityCode, { metaKey: e.metaKey, ctrlKey: e.ctrlKey, shiftKey: e.shiftKey } as React.MouseEvent);
+        }
       }}
     />
   );
@@ -110,6 +120,9 @@ export default function DrillDownMapView({ countryIso2, countryName }: DrillDown
   const activePaintId = useActivePaintGeoId();
   const eraserActive = useActiveEraser();
   const { assignStateToGeo, clearStateAssignment } = useActions();
+  const selectActive = useActiveSelect();
+  const selectedCodes = useSelectedEntityCodes();
+  const { setSelection, addToSelection, toggleSelection } = useActions();
   const showLabels = useShowLabels();
   const { active: choroplethActive, scale } = useChoroplethScale('drilldown', countryIso2);
   const scaleMax = scale?.max ?? 0;
@@ -158,7 +171,13 @@ export default function DrillDownMapView({ countryIso2, countryName }: DrillDown
   }, []);
 
   const handleClickState = useCallback(
-    (entityCode: string) => {
+    (entityCode: string, e: React.MouseEvent) => {
+      if (selectActive) {
+        if (e.metaKey || e.ctrlKey) toggleSelection(entityCode);
+        else if (e.shiftKey) addToSelection([entityCode]);
+        else setSelection([entityCode]);
+        return;
+      }
       if (eraserActive) {
         clearStateAssignment(entityCode);
         return;
@@ -169,7 +188,11 @@ export default function DrillDownMapView({ countryIso2, countryName }: DrillDown
       }
       togglePinnedEntityIso(entityCode);
     },
-    [eraserActive, clearStateAssignment, activePaintId, assignStateToGeo, togglePinnedEntityIso],
+    [
+      selectActive, toggleSelection, addToSelection, setSelection,
+      eraserActive, clearStateAssignment, activePaintId, assignStateToGeo,
+      togglePinnedEntityIso,
+    ],
   );
 
   const handleBackgroundClick = useCallback((e: React.MouseEvent) => {
@@ -246,21 +269,26 @@ export default function DrillDownMapView({ countryIso2, countryName }: DrillDown
               const { geographies, projection } = args as unknown as { geographies: GeographyFeature[]; projection: GeoProjection };
               return (
                 <>
-                  {geographies.map((geo) => (
-                    <StateGeo
-                      key={geo.rsmKey}
-                      geo={geo as unknown as EnrichedStateGeo}
-                      onClickState={handleClickState}
-                      scaleMax={scaleMax}
-                      choroplethActive={choroplethActive}
-                      unassignedFill={theme.unassignedFill}
-                      unassignedHover={theme.unassignedHover}
-                      hoverOpacity={theme.hoverOpacity}
-                      stateStroke={theme.stateStroke}
-                      stateStrokeWidth={theme.stateStrokeWidth * 0.25}
-                      transition={theme.transition}
-                    />
-                  ))}
+                  {geographies.map((geo) => {
+                    const enriched = geo as unknown as EnrichedStateGeo;
+                    const entityCode = `${enriched.iso2}:${enriched.id}`;
+                    return (
+                      <StateGeo
+                        key={geo.rsmKey}
+                        geo={enriched}
+                        onClickState={handleClickState}
+                        isSelected={selectedCodes.includes(entityCode)}
+                        scaleMax={scaleMax}
+                        choroplethActive={choroplethActive}
+                        unassignedFill={theme.unassignedFill}
+                        unassignedHover={theme.unassignedHover}
+                        hoverOpacity={theme.hoverOpacity}
+                        stateStroke={theme.stateStroke}
+                        stateStrokeWidth={theme.stateStrokeWidth * 0.25}
+                        transition={theme.transition}
+                      />
+                    );
+                  })}
                   {showLabels && (
                     <MapLabels
                       geographies={geographies as unknown as { rsmKey: string; name: string; geometry: unknown }[]}
