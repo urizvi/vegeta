@@ -23,6 +23,7 @@ export const useShowLabels = () => useTerritoryStore((s) => s.showLabels);
 export const usePinnedEntityIso = () => useTerritoryStore((s) => s.pinnedEntityIso);
 export const useHighlightedEntityCodes = () =>
   useTerritoryStore((s) => s.highlightedEntityCodes);
+export const useMapZoomCommand = () => useTerritoryStore((s) => s.mapZoomCommand);
 
 /** Effective focused entity = pinned (if any) else hovered. */
 export const useFocusedEntityIso = () =>

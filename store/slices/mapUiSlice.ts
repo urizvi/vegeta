@@ -2,6 +2,11 @@ import type { StateCreator } from 'zustand';
 import { DEFAULT_THEME_ID, type MapThemeId } from '@/lib/mapThemes';
 import type { TerritoryStore } from '../types';
 
+export type ZoomCommand =
+  | { kind: 'panBy'; dx: number; dy: number; nonce: number }
+  | { kind: 'zoomBy'; factor: number; nonce: number }
+  | { kind: 'reset'; nonce: number };
+
 export interface MapUiSlice {
   activeView: 'map' | 'spreadsheet';
   mapThemeId: MapThemeId;
@@ -15,6 +20,7 @@ export interface MapUiSlice {
   showLabels: boolean;
   pinnedEntityIso: string | null;
   highlightedEntityCodes: string[];
+  mapZoomCommand: ZoomCommand | null;
 
   setActiveView: (view: 'map' | 'spreadsheet') => void;
   setMapTheme: (themeId: MapThemeId) => void;
@@ -30,6 +36,7 @@ export interface MapUiSlice {
   togglePinnedEntityIso: (iso: string) => void;
   setHighlightedEntityCodes: (codes: string[]) => void;
   clearHighlight: () => void;
+  setMapZoomCommand: (cmd: ZoomCommand | null) => void;
 }
 
 export const mapUiPersistKeys = ['mapThemeId', 'mapAccountMetric'] as const satisfies readonly (keyof MapUiSlice)[];
@@ -46,6 +53,7 @@ export const createMapUiSlice: StateCreator<TerritoryStore, [], [], MapUiSlice> 
   showLabels: false,
   pinnedEntityIso: null,
   highlightedEntityCodes: [],
+  mapZoomCommand: null,
 
   setActiveView: (view) => set({ activeView: view }),
   setMapTheme: (themeId) => set({ mapThemeId: themeId }),
@@ -62,4 +70,5 @@ export const createMapUiSlice: StateCreator<TerritoryStore, [], [], MapUiSlice> 
     set((s) => ({ pinnedEntityIso: s.pinnedEntityIso === iso ? null : iso })),
   setHighlightedEntityCodes: (codes) => set({ highlightedEntityCodes: codes }),
   clearHighlight: () => set({ highlightedEntityCodes: [] }),
+  setMapZoomCommand: (cmd) => set({ mapZoomCommand: cmd }),
 });
