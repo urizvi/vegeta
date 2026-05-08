@@ -7,6 +7,7 @@ import { useGeoData } from '@/hooks/useGeoData';
 import {
   useChoroplethFillColor, useMapTheme, useActions, useActivePaintGeoId, useActiveEraser,
   usePinnedEntityIso, useEntityHighlight, useShowLabels,
+  useActiveSelect, useSelectedEntityCodes,
 } from '@/hooks/useTerritoryStore';
 import { useChoroplethScale } from '@/hooks/useChoroplethScale';
 import MapInfoRail from './MapInfoRail';
@@ -29,11 +30,12 @@ interface EnrichedGeo {
 }
 
 const CountryGeo = memo(function CountryGeo({
-  geo, onClickCountry, scaleMax, choroplethActive,
+  geo, onClickCountry, isSelected, scaleMax, choroplethActive,
   unassignedFill, unassignedHover, hoverOpacity, countryStroke, countryStrokeWidth, transition,
 }: {
   geo: EnrichedGeo;
-  onClickCountry: (entityCode: string, name: string) => void;
+  onClickCountry: (entityCode: string, name: string, e: React.MouseEvent) => void;
+  isSelected: boolean;
   scaleMax: number;
   choroplethActive: boolean;
   unassignedFill: string;
@@ -55,21 +57,28 @@ const CountryGeo = memo(function CountryGeo({
     <Geography
       geography={geo as unknown as import('react-simple-maps').GeographyFeature}
       fill={fill}
-      stroke={isHighlighted ? 'var(--color-brand)' : isPinned ? 'var(--color-brand)' : countryStroke}
-      strokeWidth={isHighlighted ? 2 : isPinned ? 1.5 : countryStrokeWidth}
+      stroke={isSelected ? 'var(--color-brand)' : isHighlighted ? 'var(--color-brand)' : isPinned ? 'var(--color-brand)' : countryStroke}
+      strokeWidth={isSelected ? 2 : isHighlighted ? 2 : isPinned ? 1.5 : countryStrokeWidth}
       style={{
-        default: { outline: 'none', cursor: 'pointer', transition },
+        default: {
+          outline: 'none',
+          cursor: 'pointer',
+          transition,
+          ...(isSelected ? { fill: `color-mix(in srgb, var(--color-brand) 4%, ${fill})` } : {}),
+        },
         hover:   { outline: 'none', fill: isUnassigned ? unassignedHover : fill, opacity: hoverOpacity },
         pressed: { outline: 'none' },
       }}
       onMouseEnter={() => { setHoveredEntityCode(geo.name); setHoveredEntityIso(entityCode); }}
       onMouseLeave={() => { setHoveredEntityCode(null); setHoveredEntityIso(null); }}
-      onClick={() => onClickCountry(entityCode, geo.name)}
+      onClick={(e: React.MouseEvent<SVGPathElement>) => onClickCountry(entityCode, geo.name, e)}
       role="button"
       aria-label={geo.name}
       tabIndex={0}
       onKeyDown={(e: React.KeyboardEvent<SVGPathElement>) => {
-        if (e.key === 'Enter' || e.key === ' ') onClickCountry(entityCode, geo.name);
+        if (e.key === 'Enter' || e.key === ' ') {
+          onClickCountry(entityCode, geo.name, { metaKey: e.metaKey, ctrlKey: e.ctrlKey, shiftKey: e.shiftKey } as React.MouseEvent);
+        }
       }}
     />
   );
@@ -81,6 +90,9 @@ export default function WorldMapView({ onDrillDown }: WorldMapViewProps) {
   const activePaintId = useActivePaintGeoId();
   const eraserActive = useActiveEraser();
   const { assignCountryToGeo, clearCountryAssignment } = useActions();
+  const selectActive = useActiveSelect();
+  const selectedCodes = useSelectedEntityCodes();
+  const { setSelection, addToSelection, toggleSelection } = useActions();
   const showLabels = useShowLabels();
   const { active: choroplethActive, scale } = useChoroplethScale('world');
   const scaleMax = scale?.max ?? 0;
@@ -112,7 +124,13 @@ export default function WorldMapView({ onDrillDown }: WorldMapViewProps) {
   }, []);
 
   const handleClickCountry = useCallback(
-    (entityCode: string, name: string) => {
+    (entityCode: string, name: string, e: React.MouseEvent) => {
+      if (selectActive) {
+        if (e.metaKey || e.ctrlKey) toggleSelection(entityCode);
+        else if (e.shiftKey) addToSelection([entityCode]);
+        else setSelection([entityCode]);
+        return;
+      }
       if (eraserActive) {
         clearCountryAssignment(entityCode);
         return;
@@ -124,7 +142,11 @@ export default function WorldMapView({ onDrillDown }: WorldMapViewProps) {
       togglePinnedEntityIso(entityCode);
       onDrillDown(entityCode, name);
     },
-    [eraserActive, clearCountryAssignment, activePaintId, assignCountryToGeo, togglePinnedEntityIso, onDrillDown],
+    [
+      selectActive, toggleSelection, addToSelection, setSelection,
+      eraserActive, clearCountryAssignment, activePaintId, assignCountryToGeo,
+      togglePinnedEntityIso, onDrillDown,
+    ],
   );
 
   const handleBackgroundClick = useCallback((e: React.MouseEvent) => {
@@ -172,21 +194,25 @@ export default function WorldMapView({ onDrillDown }: WorldMapViewProps) {
               const { geographies, projection } = args as unknown as { geographies: GeographyFeature[]; projection: GeoProjection };
               return (
                 <>
-                  {geographies.map((geo) => (
-                    <CountryGeo
-                      key={geo.rsmKey}
-                      geo={geo as unknown as EnrichedGeo}
-                      onClickCountry={handleClickCountry}
-                      scaleMax={scaleMax}
-                      choroplethActive={choroplethActive}
-                      unassignedFill={theme.unassignedFill}
-                      unassignedHover={theme.unassignedHover}
-                      hoverOpacity={theme.hoverOpacity}
-                      countryStroke={theme.countryStroke}
-                      countryStrokeWidth={theme.countryStrokeWidth}
-                      transition={theme.transition}
-                    />
-                  ))}
+                  {geographies.map((geo) => {
+                    const entityCode = (geo as unknown as EnrichedGeo).iso2 || (geo as unknown as EnrichedGeo).id;
+                    return (
+                      <CountryGeo
+                        key={geo.rsmKey}
+                        geo={geo as unknown as EnrichedGeo}
+                        onClickCountry={handleClickCountry}
+                        isSelected={selectedCodes.includes(entityCode)}
+                        scaleMax={scaleMax}
+                        choroplethActive={choroplethActive}
+                        unassignedFill={theme.unassignedFill}
+                        unassignedHover={theme.unassignedHover}
+                        hoverOpacity={theme.hoverOpacity}
+                        countryStroke={theme.countryStroke}
+                        countryStrokeWidth={theme.countryStrokeWidth}
+                        transition={theme.transition}
+                      />
+                    );
+                  })}
                   {showLabels && (
                     <MapLabels
                       geographies={geographies as unknown as { rsmKey: string; name: string; geometry: unknown }[]}

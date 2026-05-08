@@ -15,4 +15,5 @@ export * from '@/store/slices/geoSelectors';
 export * from '@/store/slices/accountsSelectors';
 export * from '@/store/slices/hierarchyLevelsSelectors';
 export * from '@/store/slices/pipelineStagesSelectors';
+export * from '@/store/slices/selectionSelectors';
 export * from '@/store/selectors';
