@@ -31,11 +31,12 @@ interface EnrichedGeo {
 }
 
 const CountryGeo = memo(function CountryGeo({
-  geo, onClickCountry, isSelected, scaleMax, choroplethActive,
+  geo, onClickCountry, onDoubleClickFeature, isSelected, scaleMax, choroplethActive,
   unassignedFill, unassignedHover, hoverOpacity, countryStroke, countryStrokeWidth, transition,
 }: {
   geo: EnrichedGeo;
   onClickCountry: (entityCode: string, name: string, e: React.MouseEvent) => void;
+  onDoubleClickFeature: (entityCode: string) => void;
   isSelected: boolean;
   scaleMax: number;
   choroplethActive: boolean;
@@ -73,6 +74,10 @@ const CountryGeo = memo(function CountryGeo({
       onMouseEnter={() => { setHoveredEntityCode(geo.name); setHoveredEntityIso(entityCode); }}
       onMouseLeave={() => { setHoveredEntityCode(null); setHoveredEntityIso(null); }}
       onClick={(e: React.MouseEvent<SVGPathElement>) => onClickCountry(entityCode, geo.name, e)}
+      onDoubleClick={(e: React.MouseEvent<SVGPathElement>) => {
+        e.stopPropagation(); // prevent ZoomableGroup's own dblclick zoom from also firing
+        onDoubleClickFeature(entityCode);
+      }}
       role="button"
       aria-label={geo.name}
       tabIndex={0}
@@ -153,6 +158,17 @@ export default function WorldMapView({ onDrillDown }: WorldMapViewProps) {
       togglePinnedEntityIso, onDrillDown,
     ],
   );
+
+  const handleDoubleClickFeature = useCallback((entityCode: string) => {
+    const geo = geographiesRef.current.find((g) => {
+      const enriched = g as unknown as EnrichedGeo;
+      return (enriched.iso2 || enriched.id) === entityCode;
+    });
+    if (!geo) return;
+    const [lng, lat] = geoCentroid(geo as unknown as GeoJSON.Feature);
+    setCenter([lng, lat]);
+    setZoom((z) => Math.min(z * 2.5, 8));
+  }, []);
 
   const handleLassoMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (!selectActive) return;
@@ -245,7 +261,10 @@ export default function WorldMapView({ onDrillDown }: WorldMapViewProps) {
           maxZoom={8}
           // filterZoomEvent exists at runtime but is missing from the bundled types
           {...({ filterZoomEvent: (evt: Event) => {
-            if (evt.type === 'wheel' || evt.type === 'dblclick') return true;
+            // Wheel events include trackpad pinch (delivered as wheel + ctrlKey). Always allow.
+            if (evt.type === 'wheel') return true;
+            if (evt.type === 'dblclick') return true;
+            // Mousedown-drag pan only when zoomed in, to keep clicks at zoom 1 from being eaten by drag.
             return zoomRef.current > 1.05;
           }} as Record<string, unknown>)}
           onMoveEnd={({ coordinates, zoom: z }) => {
@@ -270,6 +289,7 @@ export default function WorldMapView({ onDrillDown }: WorldMapViewProps) {
                         key={geo.rsmKey}
                         geo={geo as unknown as EnrichedGeo}
                         onClickCountry={handleClickCountry}
+                        onDoubleClickFeature={handleDoubleClickFeature}
                         isSelected={selectedCodes.includes(entityCode)}
                         scaleMax={scaleMax}
                         choroplethActive={choroplethActive}

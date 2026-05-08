@@ -34,6 +34,7 @@ interface EnrichedStateGeo {
 const StateGeo = memo(function StateGeo({
   geo,
   onClickState,
+  onDoubleClickFeature,
   isSelected,
   scaleMax,
   choroplethActive,
@@ -46,6 +47,7 @@ const StateGeo = memo(function StateGeo({
 }: {
   geo: EnrichedStateGeo;
   onClickState: (entityCode: string, e: React.MouseEvent) => void;
+  onDoubleClickFeature: (entityCode: string) => void;
   isSelected: boolean;
   scaleMax: number;
   choroplethActive: boolean;
@@ -83,6 +85,10 @@ const StateGeo = memo(function StateGeo({
       onMouseEnter={() => { setHoveredEntityCode(`${geo.name} (${geo.id})`); setHoveredEntityIso(entityCode); }}
       onMouseLeave={() => { setHoveredEntityCode(null); setHoveredEntityIso(null); }}
       onClick={(e: React.MouseEvent<SVGPathElement>) => onClickState(entityCode, e)}
+      onDoubleClick={(e: React.MouseEvent<SVGPathElement>) => {
+        e.stopPropagation(); // prevent ZoomableGroup's own dblclick zoom from also firing
+        onDoubleClickFeature(entityCode);
+      }}
       role="button"
       aria-label={geo.name}
       tabIndex={0}
@@ -155,6 +161,8 @@ export default function DrillDownMapView({ countryIso2, countryName }: DrillDown
   const [prevInitialZoom, setPrevInitialZoom] = useState(initialZoom);
   const [prevCenter, setPrevCenter] = useState(center);
   const [zoom, setZoom] = useState(initialZoom);
+  const zoomRef = useRef(zoom);
+  useEffect(() => { zoomRef.current = zoom; }, [zoom]);
   const [currentCenter, setCurrentCenter] = useState<[number, number]>(center);
   // getDerivedStateFromProps: reset zoom + center when country/features change
   if (prevInitialZoom !== initialZoom || prevCenter[0] !== center[0] || prevCenter[1] !== center[1]) {
@@ -202,6 +210,17 @@ export default function DrillDownMapView({ countryIso2, countryName }: DrillDown
   const handleBackgroundClick = useCallback((e: React.MouseEvent) => {
     if (e.target === e.currentTarget) setPinnedEntityIso(null);
   }, [setPinnedEntityIso]);
+
+  const handleDoubleClickFeature = useCallback((stateCode: string) => {
+    const geo = geographiesRef.current.find((g) => {
+      const enriched = g as unknown as EnrichedStateGeo;
+      return `${enriched.iso2}:${enriched.id}` === stateCode;
+    });
+    if (!geo) return;
+    const [lng, lat] = geoCentroid(geo as unknown as GeoJSON.Feature);
+    setCurrentCenter([lng, lat]);
+    setZoom((z) => Math.min(z * 2.5, 80));
+  }, []);
 
   const handleLassoMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (!selectActive) return;
@@ -323,6 +342,14 @@ export default function DrillDownMapView({ countryIso2, countryName }: DrillDown
           [-MAP_W, -mapHeight],
           [MAP_W * 2, mapHeight * 2]
           ]}
+          // filterZoomEvent exists at runtime but is missing from the bundled types
+          {...({ filterZoomEvent: (evt: Event) => {
+            // Wheel events include trackpad pinch (delivered as wheel + ctrlKey). Always allow.
+            if (evt.type === 'wheel') return true;
+            if (evt.type === 'dblclick') return true;
+            // Mousedown-drag pan only when zoomed in, to keep clicks at zoom 1 from being eaten by drag.
+            return zoomRef.current > initialZoom * 1.05;
+          }} as Record<string, unknown>)}
           onMoveEnd={({ coordinates, zoom: z }) => {
             setCurrentCenter(coordinates as [number, number]);
             setZoom(z);
@@ -346,6 +373,7 @@ export default function DrillDownMapView({ countryIso2, countryName }: DrillDown
                         key={geo.rsmKey}
                         geo={enriched}
                         onClickState={handleClickState}
+                        onDoubleClickFeature={handleDoubleClickFeature}
                         isSelected={selectedCodes.includes(entityCode)}
                         scaleMax={scaleMax}
                         choroplethActive={choroplethActive}
