@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useCallback, useMemo, memo, useEffect } from 'react';
+import { useState, useCallback, useMemo, memo, useEffect, useRef } from 'react';
 import { ComposableMap, ZoomableGroup, Geographies, Geography, Graticule, type GeographyFeature } from 'react-simple-maps';
 import type { GeoProjection } from 'd3-geo';
-import { geoMercator, geoPath } from 'd3-geo';
+import { geoMercator, geoPath, geoCentroid } from 'd3-geo';
 import { useCountryStates } from '@/hooks/useCountryStates';
 import type { StateFeature } from '@/hooks/useCountryStates';
 import {
@@ -138,6 +138,10 @@ export default function DrillDownMapView({ countryIso2, countryName }: DrillDown
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [clearHighlight, setPinnedEntityIso]);
+  const [lasso, setLasso] = useState<{ x0: number; y0: number; x1: number; y1: number; shift: boolean } | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const projectionRef = useRef<GeoProjection | null>(null);
+  const geographiesRef = useRef<GeographyFeature[]>([]);
   const useAlbers = isAlbersUsa(countryIso2);
   const solidBackdrop = useSolidBackdrop(countryIso2);
 
@@ -199,6 +203,66 @@ export default function DrillDownMapView({ countryIso2, countryName }: DrillDown
     if (e.target === e.currentTarget) setPinnedEntityIso(null);
   }, [setPinnedEntityIso]);
 
+  const handleLassoMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!selectActive) return;
+    if (e.target !== e.currentTarget) {
+      // Click started on a region — let the region's own click handler run.
+      return;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    setLasso({
+      x0: e.clientX - rect.left,
+      y0: e.clientY - rect.top,
+      x1: e.clientX - rect.left,
+      y1: e.clientY - rect.top,
+      shift: e.shiftKey,
+    });
+  }, [selectActive]);
+
+  const handleLassoMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!lasso) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    setLasso({ ...lasso, x1: e.clientX - rect.left, y1: e.clientY - rect.top });
+  }, [lasso]);
+
+  const handleLassoMouseUp = useCallback(() => {
+    if (!lasso) return;
+    const proj = projectionRef.current;
+    const geos = geographiesRef.current;
+    const container = containerRef.current;
+    const svg = container?.querySelector('svg') as SVGSVGElement | null;
+    if (proj && geos.length && svg) {
+      const x0 = Math.min(lasso.x0, lasso.x1);
+      const y0 = Math.min(lasso.y0, lasso.y1);
+      const x1 = Math.max(lasso.x0, lasso.x1);
+      const y1 = Math.max(lasso.y0, lasso.y1);
+      // Convert pixel coords (relative to outer container) into SVG viewBox coords (MAP_W x mapHeight).
+      const svgRect = svg.getBoundingClientRect();
+      const sx = MAP_W / svgRect.width;
+      const sy = mapHeight / svgRect.height;
+      const mx0 = x0 * sx, my0 = y0 * sy, mx1 = x1 * sx, my1 = y1 * sy;
+      const hits: string[] = [];
+      for (const geo of geos) {
+        const [lng, lat] = geoCentroid(geo as unknown as GeoJSON.Feature);
+        const projected = (proj as unknown as (coords: [number, number]) => [number, number] | null)([lng, lat]);
+        if (!projected) continue;
+        const [cx, cy] = projected;
+        if (cx >= mx0 && cx <= mx1 && cy >= my0 && cy <= my1) {
+          const enriched = geo as unknown as EnrichedStateGeo;
+          const stateCode = `${enriched.iso2}:${enriched.id}`;
+          hits.push(stateCode);
+        }
+      }
+      if (hits.length) {
+        if (lasso.shift) addToSelection(hits);
+        else setSelection(hits);
+      } else if (!lasso.shift) {
+        setSelection([]);
+      }
+    }
+    setLasso(null);
+  }, [lasso, mapHeight, addToSelection, setSelection]);
+
   if (loading) {
     return (
       <div className="absolute inset-0 flex items-center justify-center" style={{ background: theme.bg }}>
@@ -234,9 +298,12 @@ export default function DrillDownMapView({ countryIso2, countryName }: DrillDown
 
   return (
     <div
+      ref={containerRef}
       className="absolute inset-0"
       style={{ background: solidBackdrop ? theme.bg : theme.sphereFill, cursor }}
-      onMouseMove={handleMouseMove}
+      onMouseMove={(e) => { handleMouseMove(e); handleLassoMouseMove(e); }}
+      onMouseDown={handleLassoMouseDown}
+      onMouseUp={handleLassoMouseUp}
       onClick={handleBackgroundClick}
     >
       <div className="absolute inset-0 overflow-y-auto overflow-x-hidden">
@@ -267,6 +334,8 @@ export default function DrillDownMapView({ countryIso2, countryName }: DrillDown
           <Geographies geography={featureCollection}>
             {(args) => {
               const { geographies, projection } = args as unknown as { geographies: GeographyFeature[]; projection: GeoProjection };
+              projectionRef.current = projection;
+              geographiesRef.current = geographies;
               return (
                 <>
                   {geographies.map((geo) => {
@@ -304,6 +373,25 @@ export default function DrillDownMapView({ countryIso2, countryName }: DrillDown
         </ZoomableGroup>
       </ComposableMap>
       </div>
+
+      {lasso && (
+        <svg
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 h-full w-full"
+        >
+          <rect
+            x={Math.min(lasso.x0, lasso.x1)}
+            y={Math.min(lasso.y0, lasso.y1)}
+            width={Math.abs(lasso.x1 - lasso.x0)}
+            height={Math.abs(lasso.y1 - lasso.y0)}
+            fill="var(--color-brand)"
+            fillOpacity={0.06}
+            stroke="var(--color-brand)"
+            strokeWidth={1}
+            strokeDasharray="4 3"
+          />
+        </svg>
+      )}
 
       {/* Zoom controls — single rounded panel with internal hairlines */}
       <div className="absolute right-4 top-4 z-10 flex flex-col overflow-hidden rounded-xl border border-hairline bg-panel/85 shadow-md backdrop-blur-md divide-y divide-hairline">
