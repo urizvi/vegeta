@@ -21,6 +21,7 @@ export const useActivePaintGeoId = () => useTerritoryStore((s) => s.activePaintG
 export const useActivePaintGeo = () =>
   useTerritoryStore((s) => (s.activePaintGeoId ? s.geoNodes[s.activePaintGeoId] ?? null : null));
 export const useActiveEraser = () => useTerritoryStore((s) => s.activeEraser);
+export const useActiveSelect = () => useTerritoryStore((s) => s.selectActive);
 
 export const useCanUndoGeo = () => useTerritoryStore((s) => s.geoUndoStack.length > 0);
 export const useCanRedoGeo = () => useTerritoryStore((s) => s.geoRedoStack.length > 0);

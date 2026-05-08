@@ -46,6 +46,7 @@ export interface GeoSlice {
   geoNodeOrder: string[];
   activePaintGeoId: string | null;
   activeEraser: boolean;
+  selectActive: boolean;
   geoUndoStack: NodeCodesPatch[][]; // each entry is one op (multi-node)
   geoRedoStack: NodeCodesPatch[][];
 
@@ -65,6 +66,7 @@ export interface GeoSlice {
 
   setActivePaintGeo: (id: string | null) => void;
   setActiveEraser: (active: boolean) => void;
+  setActiveSelect: (active: boolean) => void;
 
   undoGeoAssignment: () => void;
   redoGeoAssignment: () => void;
@@ -139,6 +141,7 @@ export const createGeoSlice: StateCreator<TerritoryStore, [], [], GeoSlice> = (s
   geoNodeOrder: [],
   activePaintGeoId: null,
   activeEraser: false,
+  selectActive: false,
   geoUndoStack: [],
   geoRedoStack: [],
 
@@ -327,14 +330,18 @@ export const createGeoSlice: StateCreator<TerritoryStore, [], [], GeoSlice> = (s
   },
 
   setActivePaintGeo(id) {
-    // Mutually exclusive with eraser.
-    if (id) set({ activePaintGeoId: id, activeEraser: false });
+    if (id) set({ activePaintGeoId: id, activeEraser: false, selectActive: false });
     else set({ activePaintGeoId: null });
   },
 
   setActiveEraser(active) {
-    if (active) set({ activeEraser: true, activePaintGeoId: null });
+    if (active) set({ activeEraser: true, activePaintGeoId: null, selectActive: false });
     else set({ activeEraser: false });
+  },
+
+  setActiveSelect(active) {
+    if (active) set({ selectActive: true, activePaintGeoId: null, activeEraser: false });
+    else set({ selectActive: false });
   },
 
   undoGeoAssignment() {
