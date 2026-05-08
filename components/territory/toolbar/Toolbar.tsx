@@ -17,6 +17,7 @@ import type { MapThemeId } from '@/lib/mapThemes';
 import WorkspaceSwitcher from '@/components/WorkspaceSwitcher';
 import { useEntityNoun } from '@/hooks/useEntityNoun';
 import { useModuleEnabled } from '@/hooks/useModuleEnabled';
+import { MapHelpPopover } from '@/components/territory/map/MapHelpPopover';
 
 interface ToolbarProps {
   drillDownCountryName: string | null;
@@ -251,6 +252,17 @@ export default function Toolbar({ drillDownCountryName }: ToolbarProps) {
         </button>
       )}
 
+      <button
+        type="button"
+        onClick={() => setHelpOpen((v) => !v)}
+        className="ml-1 inline-flex h-6 w-6 items-center justify-center rounded-full border border-hairline text-[11px] font-semibold text-ink-muted hover:text-ink"
+        aria-label="Keyboard shortcuts"
+        aria-expanded={helpOpen}
+        title="Keyboard shortcuts (?)"
+      >
+        ?
+      </button>
+
       {/* Undo / redo */}
       <div className="flex items-center gap-0.5 rounded-md border border-hairline bg-panel/60 p-0.5">
         <button
@@ -387,6 +399,7 @@ export default function Toolbar({ drillDownCountryName }: ToolbarProps) {
       >
         Sign out
       </button>
+      <MapHelpPopover open={helpOpen} onClose={() => setHelpOpen(false)} />
     </header>
   );
 }
