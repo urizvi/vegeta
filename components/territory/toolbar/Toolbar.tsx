@@ -1,13 +1,15 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import {
   useActiveView, useDrillDownCountryCode, useMapTheme, useAccountOrder,
   useShowAccounts, useMapAccountMetric, useActions, useMetricFields,
   useActivePaintGeo, useActiveEraser, useActiveSelect, useCanUndoGeo, useCanRedoGeo,
   useShowLabels,
 } from '@/hooks/useTerritoryStore';
+import { useSelectionCount } from '@/store/slices/selectionSelectors';
+import type { ZoomCommand } from '@/store/slices/mapUiSlice';
 import { logout } from '@/lib/auth';
 import { useRouter } from 'next/navigation';
 import { MAP_THEMES } from '@/lib/mapThemes';
@@ -52,9 +54,10 @@ export default function Toolbar({ drillDownCountryName }: ToolbarProps) {
   const {
     setActiveView, setDrillDownCountryCode, setMapTheme,
     toggleShowAccounts, setMapAccountMetric, setActivePaintGeo, setActiveEraser, setActiveSelect,
-    undoGeoAssignment, redoGeoAssignment, toggleShowLabels, clearSelection,
+    undoGeoAssignment, redoGeoAssignment, toggleShowLabels, clearSelection, setMapZoomCommand,
   } = useActions();
-  void clearSelection; // destructured for Task 12 Esc cascade; not yet called at this site
+  const [helpOpen, setHelpOpen] = useState(false);
+  const selectionCount = useSelectionCount();
 
   useEffect(() => {
     function isEditableTarget(t: EventTarget | null): boolean {
@@ -63,13 +66,48 @@ export default function Toolbar({ drillDownCountryName }: ToolbarProps) {
       return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || t.isContentEditable;
     }
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape' && (paintGeo || eraserActive)) {
-        setActivePaintGeo(null);
-        setActiveEraser(false);
+      if (isEditableTarget(e.target)) return;
+
+      // Esc cascade: popover → selection → paint/eraser
+      if (e.key === 'Escape') {
+        if (helpOpen) { setHelpOpen(false); return; }
+        if (selectionCount > 0) { clearSelection(); return; }
+        if (paintGeo || eraserActive) {
+          setActivePaintGeo(null);
+          setActiveEraser(false);
+          return;
+        }
         return;
       }
-      const cmd = e.metaKey || e.ctrlKey;
-      if (!cmd || isEditableTarget(e.target)) return;
+
+      // ? toggles help (key === '?' on most layouts)
+      if (e.key === '?') {
+        e.preventDefault();
+        setHelpOpen((v) => !v);
+        return;
+      }
+
+      // Arrow / +/- / 0 — dispatch zoom commands (no modifier)
+      if (!e.metaKey && !e.ctrlKey && !e.altKey) {
+        let cmd: ZoomCommand | null = null;
+        const PAN_PX = 40;
+        if (e.key === 'ArrowUp')         cmd = { kind: 'panBy', dx: 0, dy: -PAN_PX, nonce: Date.now() };
+        else if (e.key === 'ArrowDown')  cmd = { kind: 'panBy', dx: 0, dy:  PAN_PX, nonce: Date.now() };
+        else if (e.key === 'ArrowLeft')  cmd = { kind: 'panBy', dx: -PAN_PX, dy: 0, nonce: Date.now() };
+        else if (e.key === 'ArrowRight') cmd = { kind: 'panBy', dx:  PAN_PX, dy: 0, nonce: Date.now() };
+        else if (e.key === '+' || e.key === '=') cmd = { kind: 'zoomBy', factor: 1.5, nonce: Date.now() };
+        else if (e.key === '-')                  cmd = { kind: 'zoomBy', factor: 1 / 1.5, nonce: Date.now() };
+        else if (e.key === '0')                  cmd = { kind: 'reset', nonce: Date.now() };
+        if (cmd) {
+          e.preventDefault();
+          setMapZoomCommand(cmd);
+          return;
+        }
+      }
+
+      // Existing undo/redo (cmd+z, cmd+shift+z, cmd+y)
+      const withCmdKey = e.metaKey || e.ctrlKey;
+      if (!withCmdKey) return;
       if (e.key === 'z' && !e.shiftKey) {
         e.preventDefault();
         undoGeoAssignment();
@@ -80,7 +118,11 @@ export default function Toolbar({ drillDownCountryName }: ToolbarProps) {
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [paintGeo, eraserActive, setActivePaintGeo, setActiveEraser, undoGeoAssignment, redoGeoAssignment]);
+  }, [
+    paintGeo, eraserActive, helpOpen, selectionCount,
+    setActivePaintGeo, setActiveEraser, undoGeoAssignment, redoGeoAssignment,
+    clearSelection, setMapZoomCommand,
+  ]);
 
   const router = useRouter();
 
