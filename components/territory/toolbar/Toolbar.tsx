@@ -5,7 +5,7 @@ import { useEffect } from 'react';
 import {
   useActiveView, useDrillDownCountryCode, useMapTheme, useAccountOrder,
   useShowAccounts, useMapAccountMetric, useActions, useMetricFields,
-  useActivePaintGeo, useActiveEraser, useCanUndoGeo, useCanRedoGeo,
+  useActivePaintGeo, useActiveEraser, useActiveSelect, useCanUndoGeo, useCanRedoGeo,
   useShowLabels,
 } from '@/hooks/useTerritoryStore';
 import { logout } from '@/lib/auth';
@@ -44,15 +44,17 @@ export default function Toolbar({ drillDownCountryName }: ToolbarProps) {
   const showLabels    = useShowLabels();
   const paintGeo      = useActivePaintGeo();
   const eraserActive  = useActiveEraser();
+  const selectActive  = useActiveSelect();
   const canUndo       = useCanUndoGeo();
   const canRedo       = useCanRedoGeo();
   const entityPlural  = useEntityNoun('plural');
   const tasksEnabled  = useModuleEnabled('tasks');
   const {
     setActiveView, setDrillDownCountryCode, setMapTheme,
-    toggleShowAccounts, setMapAccountMetric, setActivePaintGeo, setActiveEraser,
-    undoGeoAssignment, redoGeoAssignment, toggleShowLabels,
+    toggleShowAccounts, setMapAccountMetric, setActivePaintGeo, setActiveEraser, setActiveSelect,
+    undoGeoAssignment, redoGeoAssignment, toggleShowLabels, clearSelection,
   } = useActions();
+  void clearSelection; // destructured for Task 12 Esc cascade; not yet called at this site
 
   useEffect(() => {
     function isEditableTarget(t: EventTarget | null): boolean {
@@ -191,6 +193,19 @@ export default function Toolbar({ drillDownCountryName }: ToolbarProps) {
             <path d="M9.05 1.05a3 3 0 014.24 0l1.66 1.66a3 3 0 010 4.24L7.7 14.2A3 3 0 015.58 15H2a1 1 0 01-1-1v-3.58A3 3 0 011.8 8.3l7.25-7.25z" />
           </svg>
           Erase
+        </button>
+      )}
+      {!paintGeo && !eraserActive && (
+        <button
+          onClick={() => setActiveSelect(!selectActive)}
+          className={`${ghostBtn}${selectActive ? ' border-brand/40 bg-brand-soft text-brand-ink' : ''}`}
+          title={selectActive ? 'Exit select mode (Esc)' : 'Multi-select regions'}
+          aria-pressed={selectActive}
+        >
+          <svg className="h-3 w-3" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M2 2l4.5 11 2-4.5L13 6.5 2 2z" />
+          </svg>
+          Select
         </button>
       )}
 
