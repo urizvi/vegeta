@@ -53,6 +53,11 @@ export interface GeoSlice {
   addGeoNode: (name: string, parentId: string | null, color?: string | null) => string;
   updateGeoNode: (id: string, patch: Partial<Pick<GeoNode, 'name' | 'color'>>) => void;
   reparentGeoNode: (id: string, newParentId: string | null) => void;
+  reorderGeoNode(
+    id: string,
+    newParentId: string | null,
+    beforeId: string | null,
+  ): void;
   /**
    * `cascade` removes the node and all descendants.
    * `reparent-children` removes the node but moves its direct children up to its parent.
@@ -205,6 +210,52 @@ export const createGeoSlice: StateCreator<TerritoryStore, [], [], GeoSlice> = (s
         directusWrite.updateGeoNodeRemote(id, { parentId: newParentId }),
       );
     }
+  },
+
+  reorderGeoNode(id, newParentId, beforeId) {
+    let didApply = false;
+    let nextOrder: string[] | null = null;
+    let parentChanged = false;
+    set((s) => {
+      if (!s.geoNodes[id]) return s;
+      if (newParentId !== null) {
+        if (newParentId === id) return s;
+        if (!s.geoNodes[newParentId]) return s;
+        if (isAncestor(s.geoNodes, id, newParentId)) return s;
+      }
+      if (beforeId !== null && !s.geoNodes[beforeId]) return s;
+      if (beforeId === id) return s;
+
+      const currentParent = s.geoNodes[id].parentId;
+      parentChanged = currentParent !== newParentId;
+
+      const without = s.geoNodeOrder.filter((nid) => nid !== id);
+      const insertAt = beforeId === null
+        ? without.length
+        : without.indexOf(beforeId);
+      const order = [...without];
+      order.splice(insertAt < 0 ? order.length : insertAt, 0, id);
+
+      didApply = true;
+      nextOrder = order;
+      return {
+        geoNodes: parentChanged
+          ? { ...s.geoNodes, [id]: { ...s.geoNodes[id], parentId: newParentId } }
+          : s.geoNodes,
+        geoNodeOrder: order,
+      };
+    });
+    if (!didApply || !nextOrder) return;
+    if (parentChanged) {
+      fireWrite(
+        `reorderGeoNode-parent(${id})`,
+        directusWrite.updateGeoNodeRemote(id, { parentId: newParentId }),
+      );
+    }
+    fireWrite(
+      `reorderGeoNode-sort(${id})`,
+      directusWrite.reorderGeoNodes(nextOrder),
+    );
   },
 
   removeGeoNode(id, mode = 'cascade') {
