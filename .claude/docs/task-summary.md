@@ -1397,3 +1397,29 @@ visual tokens; interaction work then layers on top of a stable
 visual + density baseline; sidebar editing is mostly orthogonal
 and can slot in any time after 1.
 
+
+
+**Sub-project 4 (shipped 2026-05-09) — Sidebar hierarchy editing.**
+
+Spec: `docs/superpowers/specs/2026-05-09-territory-sidebar-editing-design.md`.
+Plan: `docs/superpowers/plans/2026-05-09-territory-sidebar-editing.md`.
+
+What shipped:
+- **`@dnd-kit/core` + `@dnd-kit/sortable`** added (utilities was a transitive dep, no extra install).
+- **`reorderGeoNodes(orderedIds)`** in `lib/directus-write.ts` — sequential PATCH of `sort` mirroring `reorderLevels`.
+- **`reorderGeoNode(id, newParentId, beforeId)`** action on `geoSlice` — cycle-safe via `isAncestor`, splices `geoNodeOrder`, dual writes (parent + sort).
+- **`GeoSidebarPanel`** wraps the tree in a single `DndContext` + flat `SortableContext`. Search input filters via `lib/geoTreeFilter` with ancestor auto-expand; drag is disabled while search active.
+- **`GeoNodeRow`** consumes `useSortable` + three `useDroppable` zones (top/middle/bottom = before/nest/after). Drop overlays show 2px brand insertion line for siblings, brand-soft fill for nest. Cycle prevention dims descendant rows of the active drag target.
+- **`ColorPickerPopover`** — 10-swatch palette + Inherit chip + hex input (validates `^#[0-9a-f]{6}$`). Replaces the previous native `<input type="color">`.
+- **`SidebarSearchInput`** — controlled search box with clear button.
+- **Inline rename** preserved from prior implementation (dblclick → input, Enter commits, Esc cancels, blur commits, empty rejects).
+- **Keyboard DnD** via `KeyboardSensor` + `sortableKeyboardCoordinates` (Space pickup, Arrow move, Space drop).
+
+Implementation deviations from the plan:
+- React 19's `react-hooks/refs` rule forbids reading `obj.setNodeRef` / `ref.current` during render. `GeoNodeRow` destructures `setNodeRef`/`attributes`/`listeners`/`transform`/`transition`/`isDragging` from `useSortable` and each `useDroppable` call (matches the `KanbanBoard.tsx` pattern).
+- `ColorPickerPopover` anchor: instead of a `swatchRef.current.getBoundingClientRect()` read during render, the swatch button captures `e.currentTarget.getBoundingClientRect()` into a `pickerAnchor: DOMRect | null` state on click.
+- `useGeoNodes` / `useGeoNodeOrder` already existed in `store/slices/geoSelectors.ts`; `useActions` returns the full state via `getState()`, so no `hooks/useTerritoryStore.ts` changes were needed.
+
+Out of scope (deferred): multi-select (shift-click range, cmd-click toggle, bulk drag, bulk delete), animated tree open/close transitions beyond the existing chevron, undo/redo for reorder/rename/color (the slice's `geoUndoStack`/`geoRedoStack` are still scoped to paint operations).
+
+Verification: `npx tsc --noEmit`, `npm run lint`, `npm run build` all clean. Manual UI smoke is the user's responsibility (drag-reorder same-parent, drag-nest, drag-unnest, cycle-rejection, search auto-expand + drag disabled, color picker swatch + hex + inherit, keyboard DnD).
