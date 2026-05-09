@@ -313,6 +313,23 @@ export async function reorderLevels(orderedIds: string[]): Promise<void> {
   );
 }
 
+/** Persist sort positions matching the given id order for geo_nodes. */
+export async function reorderGeoNodes(orderedIds: string[]): Promise<void> {
+  if (!BASE_URL) throw new Error('NEXT_PUBLIC_DIRECTUS_URL is not set');
+  await Promise.all(
+    orderedIds.map((id, idx) =>
+      fetch(`${BASE_URL}/items/geo_nodes/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sort: idx }),
+      }).then(async (res) => {
+        if (!res.ok) throw await directusError(res);
+      }),
+    ),
+  );
+}
+
 // ── Teams ────────────────────────────────────────────────────────────────
 
 export async function createTeam(team: SalesTeam, sort: number): Promise<SalesTeam> {
