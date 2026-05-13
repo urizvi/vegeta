@@ -10,8 +10,14 @@ import { useEntityNoun } from '@/hooks/useEntityNoun';
 import { useOwnerNoun } from '@/hooks/useOwnerNoun';
 import { formatFieldValue } from '@/lib/accountFields';
 
-export default function RegionSummaryPanel() {
-  const iso = useFocusedEntityIso();
+interface Props {
+  /** Override the iso to summarize. Defaults to `useFocusedEntityIso()` (pin-or-hover). */
+  iso?: string | null;
+}
+
+export default function RegionSummaryPanel({ iso: isoProp }: Props = {}) {
+  const focusedIso = useFocusedEntityIso();
+  const iso = isoProp !== undefined ? isoProp : focusedIso;
   const rollup = useRegionRollup(iso);
   // useEntityNoun(form) returns a plain string; useOwnerNoun() returns a plain string.
   const entityPlural = useEntityNoun('plural');
