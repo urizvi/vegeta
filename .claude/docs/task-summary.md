@@ -1423,3 +1423,37 @@ Implementation deviations from the plan:
 Out of scope (deferred): multi-select (shift-click range, cmd-click toggle, bulk drag, bulk delete), animated tree open/close transitions beyond the existing chevron, undo/redo for reorder/rename/color (the slice's `geoUndoStack`/`geoRedoStack` are still scoped to paint operations).
 
 Verification: `npx tsc --noEmit`, `npm run lint`, `npm run build` all clean. Manual UI smoke is the user's responsibility (drag-reorder same-parent, drag-nest, drag-unnest, cycle-rejection, search auto-expand + drag disabled, color picker swatch + hex + inherit, keyboard DnD).
+
+---
+
+## Shipped 2026-05-12 — MapInfoRail rework
+
+Spec: `docs/superpowers/specs/2026-05-12-map-info-rail-rework-design.md`
+Plan: `docs/superpowers/plans/2026-05-12-map-info-rail-rework.md`
+
+### What shipped
+
+Three new files added, one deleted:
+
+- `components/territory/map/MapChip.tsx` — compact pill button with optional active/highlighted state; clicking opens a 240 px popover anchored above itself; outside-click or second click dismisses it.
+- `components/territory/map/MapChipsDock.tsx` — horizontal row of chips rendered at `absolute left-4 bottom-4`; slots in Legend, Scale (visible when active), coverage-gap, and conflict pills. Each chip's popover hosts the prior full panel content (legend swatches, scale bar, gap list, conflict list).
+- `components/territory/map/PinnedRegionCard.tsx` — 280 px card rendered at `absolute right-4 top-16`; mounts only when `pinnedEntityIso` is set; contains `RegionSummaryPanel` (with the new `iso` prop) plus a ✕ close button that calls `setPinnedEntityIso(null)`.
+- `components/territory/map/MapInfoRail.tsx` — deleted; it was a vertical sidebar hosting the same content now distributed across chips and the pinned card.
+
+`RegionSummaryPanel` gained an optional `iso` prop so `PinnedRegionCard` can supply a fixed ISO directly and opt out of the hover-fallback inside `useFocusedEntityIso`.
+
+Both `WorldMapView` and `DrillDownMapView` had their `<MapInfoRail />` mount sites replaced with `<MapChipsDock />` and `<PinnedRegionCard />`. Click-to-pin and Esc-clear-pin were already wired through the territory slice (`pinnedEntityIso` / `setPinnedEntityIso` / `togglePinnedEntityIso`), so no new slice work was needed.
+
+### Layout
+
+Legend / scale (when visible) / coverage-gap pill / conflict pill live as compact pills at `absolute left-4 bottom-4`; each opens a 240 px popover floating above the pill on click and dismisses on outside-click. The pinned region card sits at `absolute right-4 top-16 w-[280px]`, renders only when `pinnedEntityIso` is non-null, and has a ✕ close button.
+
+### Deviations from spec
+
+The spec proposed renaming `focusedEntityIso → pinnedEntityIso` and adding `pinRegion` / `unpinRegion` actions. The slice already had `pinnedEntityIso` + `setPinnedEntityIso` + `togglePinnedEntityIso`, so no renaming or new actions were needed — an explicit `iso` prop was threaded into `RegionSummaryPanel` instead.
+
+The spec also proposed extending the Toolbar's Esc cascade to cover chip popover dismissal. The current implementation relies on each view's existing Esc handler for pin clearing and on outside-click for chip popovers. Pressing Esc with a chip popover open will also clear any active pin (acceptable trade-off; can be tightened in a follow-up pass).
+
+### Verification
+
+`npm run lint` clean, `npm run build` clean (Next.js 16 / Turbopack, 14 static pages). Manual UI smoke is the user's responsibility: pin/unpin/swap via region click, each chip popover opens and closes correctly, gap/conflict highlight buttons still work from within the popovers, no obstruction at narrow viewport widths.
