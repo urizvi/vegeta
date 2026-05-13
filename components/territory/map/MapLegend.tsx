@@ -5,8 +5,8 @@ import { useGeoChildren, useMapTheme, useTerritoryStore } from '@/hooks/useTerri
 import type { GeoNode } from '@/types/territory';
 
 /**
- * Bare-list variant of the legend. The outer rail chrome is now provided by
- * `MapInfoRail`; this component renders only the title and dot rows.
+ * Bare-list variant of the legend. The outer chrome is provided by the
+ * caller; this component renders only the title and dot rows.
  */
 export default function MapLegend() {
   const roots = useGeoChildren(null);
