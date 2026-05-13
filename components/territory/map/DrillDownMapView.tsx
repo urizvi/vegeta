@@ -13,7 +13,8 @@ import {
 } from '@/hooks/useTerritoryStore';
 import { useChoroplethScale } from '@/hooks/useChoroplethScale';
 import { DrillDownAccountLayer } from './AccountLayer';
-import MapInfoRail from './MapInfoRail';
+import MapChipsDock from './MapChipsDock';
+import PinnedRegionCard from './PinnedRegionCard';
 import MapTooltip from './MapTooltip';
 import MapLabels from './MapLabels';
 
@@ -495,7 +496,8 @@ export default function DrillDownMapView({ countryIso2, countryName }: DrillDown
         </button>
       </div>
 
-      <MapInfoRail view="drilldown" drilldownIso2={countryIso2} />
+      <MapChipsDock view="drilldown" drilldownIso2={countryIso2} />
+      <PinnedRegionCard />
       <MapTooltip mousePos={mousePos} />
     </div>
   );
