@@ -11,7 +11,8 @@ import {
   useActiveSelect, useSelectedEntityCodes, useMapZoomCommand,
 } from '@/hooks/useTerritoryStore';
 import { useChoroplethScale } from '@/hooks/useChoroplethScale';
-import MapInfoRail from './MapInfoRail';
+import MapChipsDock from './MapChipsDock';
+import PinnedRegionCard from './PinnedRegionCard';
 import MapTooltip from './MapTooltip';
 import { WorldAccountLayer } from './AccountLayer';
 import MapLabels from './MapLabels';
@@ -403,7 +404,8 @@ export default function WorldMapView({ onDrillDown }: WorldMapViewProps) {
         </button>
       </div>
 
-      <MapInfoRail view="world" />
+      <MapChipsDock view="world" />
+      <PinnedRegionCard />
       <MapTooltip mousePos={mousePos} />
     </div>
   );
