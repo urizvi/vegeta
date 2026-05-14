@@ -18,6 +18,7 @@ import PinnedRegionCard from './PinnedRegionCard';
 import MapTooltip from './MapTooltip';
 import MapLabels from './MapLabels';
 import { useCameraAnimation, type CameraAnimationTarget } from '@/lib/useCameraAnimation';
+import { usePanMomentum } from '@/lib/usePanMomentum';
 
 interface DrillDownMapViewProps {
   countryIso2: string;
@@ -182,6 +183,10 @@ export default function DrillDownMapView({ countryIso2, countryName, cameraTarge
   useEffect(() => { centerRef.current = center; }, [center]);
   const mapHeightRef = useRef(mapHeight);
   useEffect(() => { mapHeightRef.current = mapHeight; }, [mapHeight]);
+  const momentum = usePanMomentum({
+    setCenter: camera.setCenter,
+    getCenter: () => currentCenterRef.current,
+  });
   // getDerivedStateFromProps: reset zoom + center when country/features change
   if (prevInitialZoom !== initialZoom || prevCenter[0] !== center[0] || prevCenter[1] !== center[1]) {
     setPrevInitialZoom(initialZoom);
@@ -398,6 +403,9 @@ export default function DrillDownMapView({ countryIso2, countryName, cameraTarge
           [-MAP_W, -mapHeight],
           [MAP_W * 2, mapHeight * 2]
           ]}
+          onMoveStart={momentum.onMoveStart}
+          // onMove receives { coordinates } at runtime but the bundled types describe { x, y, zoom, dragging }
+          {...({ onMove: momentum.onMove } as Record<string, unknown>)}
           // filterZoomEvent exists at runtime but is missing from the bundled types
           {...({ filterZoomEvent: (evt: Event) => {
             // Wheel events include trackpad pinch (delivered as wheel + ctrlKey). Always allow.
@@ -406,9 +414,9 @@ export default function DrillDownMapView({ countryIso2, countryName, cameraTarge
             // Mousedown-drag pan only when zoomed in, to keep clicks at zoom 1 from being eaten by drag.
             return zoomRef.current > initialZoom * 1.05;
           }} as Record<string, unknown>)}
-          onMoveEnd={({ coordinates, zoom: z }) => {
-            setCurrentCenter(coordinates as [number, number]);
-            setZoom(z);
+          onMoveEnd={(e) => {
+            setZoom(e.zoom);
+            momentum.onMoveEnd(e);
           }}
         >
           {!solidBackdrop && theme.graticuleStroke && (

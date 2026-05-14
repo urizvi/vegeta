@@ -17,6 +17,7 @@ import MapTooltip from './MapTooltip';
 import { WorldAccountLayer } from './AccountLayer';
 import MapLabels from './MapLabels';
 import { useCameraAnimation, type CameraAnimationTarget } from '@/lib/useCameraAnimation';
+import { usePanMomentum } from '@/lib/usePanMomentum';
 
 interface WorldMapViewProps {
   onDrillDown: (iso2: string, name: string) => void;
@@ -119,6 +120,10 @@ export default function WorldMapView({ onDrillDown, cameraTarget, onCameraSettle
   useEffect(() => { zoomRef.current = zoom; }, [zoom]);
   const centerRef = useRef<[number, number]>(center);
   useEffect(() => { centerRef.current = center; }, [center]);
+  const momentum = usePanMomentum({
+    setCenter: camera.setCenter,
+    getCenter: () => centerRef.current,
+  });
   useEffect(() => {
     if (!cameraTarget) return;
     camera.animateTo(
@@ -307,6 +312,9 @@ export default function WorldMapView({ onDrillDown, cameraTarget, onCameraSettle
           zoom={zoom}
           minZoom={1}
           maxZoom={8}
+          onMoveStart={momentum.onMoveStart}
+          // onMove receives { coordinates } at runtime but the bundled types describe { x, y, zoom, dragging }
+          {...({ onMove: momentum.onMove } as Record<string, unknown>)}
           // filterZoomEvent exists at runtime but is missing from the bundled types
           {...({ filterZoomEvent: (evt: Event) => {
             // Wheel events include trackpad pinch (delivered as wheel + ctrlKey). Always allow.
@@ -315,9 +323,9 @@ export default function WorldMapView({ onDrillDown, cameraTarget, onCameraSettle
             // Mousedown-drag pan only when zoomed in, to keep clicks at zoom 1 from being eaten by drag.
             return zoomRef.current > 1.05;
           }} as Record<string, unknown>)}
-          onMoveEnd={({ coordinates, zoom: z }) => {
-            setCenter(coordinates as [number, number]);
-            setZoom(z);
+          onMoveEnd={(e) => {
+            setZoom(e.zoom);
+            momentum.onMoveEnd(e);
           }}
         >
           {theme.graticuleStroke && (
