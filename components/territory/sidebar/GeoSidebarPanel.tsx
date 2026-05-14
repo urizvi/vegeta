@@ -111,7 +111,7 @@ export default function GeoSidebarPanel() {
           </svg>
           New geo
         </button>
-        <SidebarSearchInput value={query} onChange={setQuery} placeholder="Search geos…" />
+        <SidebarSearchInput id="geo-sidebar-search" value={query} onChange={setQuery} placeholder="Search geos…" />
       </div>
 
       <div className="flex-1 overflow-y-auto px-2 py-2">

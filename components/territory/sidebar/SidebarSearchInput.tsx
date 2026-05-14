@@ -4,12 +4,14 @@ interface Props {
   value: string;
   onChange: (next: string) => void;
   placeholder?: string;
+  id?: string;
 }
 
-export default function SidebarSearchInput({ value, onChange, placeholder = 'Search…' }: Props) {
+export default function SidebarSearchInput({ value, onChange, placeholder = 'Search…', id }: Props) {
   return (
     <div className="relative">
       <input
+        id={id}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
