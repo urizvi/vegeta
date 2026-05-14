@@ -1542,3 +1542,116 @@ responsibility:
    with the visible focus ring.
 8. Typing `/` or `g` while focused in any input → no map action.
 9. `?` opens MapHelpPopover; rows for `/` and `g` are listed.
+
+---
+
+## Shipped 2026-05-13 — Polish-B (Geos sidebar multi-select)
+
+Spec: `docs/superpowers/specs/2026-05-13-territory-polish-b-design.md`
+Plan: `docs/superpowers/plans/2026-05-13-territory-polish-b.md`
+
+Second of four follow-up polish passes. Polish-C (undo/redo across
+sidebar mutations + animated tree open/close) and Polish-D (SP3
+motion) remain.
+
+### What shipped
+
+- `lib/isEditableTarget.ts` — extracted from `Toolbar.tsx` so the
+  sidebar's local keydown handler can reuse it. Toolbar imports it
+  instead of redeclaring locally.
+- `store/slices/geoSelectionSlice.ts` — session-only multi-select
+  state (`selectedGeoNodeIds`, `selectionAnchorId`) + four actions:
+  - `setGeoSelection(ids, anchor?)` — replace; anchor defaults to
+    last id (or null).
+  - `toggleGeoSelection(id)` — add/remove id; anchor moves to id
+    (Finder/Linear semantics).
+  - `extendGeoSelection(toId, visibleOrder)` — replaces selection
+    with the inclusive range from anchor to toId walked through
+    `visibleOrder`. If no anchor, sets `[toId]` as the new anchor.
+  - `clearGeoSelection()` — empties set; anchor stays.
+  Not added to `geoPersistKeys` — parallels the map's
+  `selectionSlice`.
+- `store/slices/geoSelectionSelectors.ts` —
+  `useSelectedGeoNodeIds`, `useGeoSelectionCount`, `useIsGeoSelected`,
+  `useGeoSelectionAnchor`. Re-exported via `hooks/useTerritoryStore`.
+- `store/slices/geoSlice.ts` — adds `reorderGeoNodes(ids,
+  newParentId, beforeId)` and `removeGeoNodes(ids, mode)` bulk
+  actions next to their single-node siblings. Cycle/membership
+  checks reject the whole batch (matches the single-node policy).
+  Bulk delete fires one `directusWrite.deleteGeoNodes` for the union
+  of dropped ids; cascade also nulls `activePaintGeoId` if the
+  active id is in the union.
+- `components/territory/sidebar/GeoNodeRow.tsx` — click dispatcher:
+  cmd/ctrl-click → `toggleGeoSelection`; shift-click →
+  `extendGeoSelection` over the parent's `visibleOrder` prop; plain
+  → `clearGeoSelection()` + existing paint toggle (preserves
+  muscle memory). `isSelected` adds
+  `bg-brand-soft/60 ring-1 ring-brand/40` (paint mode wins
+  visually). `bulkDragActive` prop dims non-active selected rows
+  during bulk drag at `opacity-40`.
+- `components/territory/sidebar/GeoSelectionDragOverlay.tsx` — count
+  chip rendered inside dnd-kit's `<DragOverlay>` during bulk drag.
+  Shows the active node's color dot + name + `+N` count badge.
+- `components/territory/sidebar/GeoSidebarPanel.tsx` — wraps the
+  return in a `<div data-geo-sidebar-root tabIndex={-1}>` with a
+  local `onKeyDown` for Esc (clears selection, `stopPropagation`)
+  and Backspace/Delete (confirm + bulk delete + clear).
+  Background-click on the scroll container clears selection.
+  `handleDragStart` detects bulk via the live selection set and
+  stores `bulkDragIds`; `handleDragEnd` captures the batch locally,
+  resets state, and routes to `reorderGeoNodes` when bulk
+  (singleton path unchanged). `bulkDragSet` (memoized) keeps the
+  per-row `bulkDragActive` check O(1). `<DragOverlay>` mounts
+  inside `<DndContext>` and renders the chip only when
+  `bulkDragIds.length > 1`.
+- `components/territory/toolbar/Toolbar.tsx` — Esc cascade gets a
+  single early-return when `document.activeElement` is inside
+  `[data-geo-sidebar-root]`. Switches to the lifted
+  `isEditableTarget`.
+
+### Deviations from spec
+
+- Recursive descent inside `GeoNodeRow` passes
+  `bulkDragActive={false}` to descendant rows. Only root-level rows
+  in `GeoSidebarPanel`'s render compute the real per-row value.
+  Descendant rows do not visually dim during bulk drag. Acceptable
+  trade-off; multi-select is typically sibling-grouped. If we ever
+  need descendant dim, replace the recursive `false` with a
+  hook-based selector — small addition.
+- The `reparent-children` mode of `removeGeoNodes` is implemented
+  for parity with single-node behavior but Polish-B's UI only
+  exercises `cascade`. The reparent path mirrors the single-node
+  per-id logic (lift children to grandparent).
+- A code-quality review pass during T9 surfaced an O(roots × batch)
+  per-row check on the inline `.includes()`; resolved by memoizing a
+  `Set` of `bulkDragIds` and switching to `.has()` (commit
+  `a50449e`).
+
+### Verification
+
+`npx tsc --noEmit`, `npm run lint`, `npm run build` all clean.
+Manual UI smoke is the user's responsibility:
+
+1. Plain click on a row → paint mode toggles; no selection styling.
+2. Cmd-click rows B, C, D → each gains brand-soft ring/fill; paint
+   mode unaffected.
+3. Shift-click row F → range from anchor (D, since cmd-click moves
+   anchor) through F replaces the selection.
+4. Plain click any row → selection clears; paint mode toggles on
+   that row.
+5. Click empty sidebar background → selection clears.
+6. Multi-select 2+ rows, drag any selected row → DragOverlay shows
+   `{name} +N`; non-active selected rows dim; drop reparents the
+   whole batch.
+7. Drag an unselected row → singleton drag exactly as before;
+   selection unchanged.
+8. Try to drop a batch onto its own descendant → whole batch
+   rejected (no state change).
+9. Selection active + Backspace/Delete → confirm dialog; OK
+   cascade-deletes, Cancel preserves.
+10. Selection active + Esc → selection clears; map state
+    (paint/eraser/region selection) unchanged.
+11. No selection + Esc → Toolbar Esc cascade still fires (popover
+    dismiss, paint clear, etc.).
+12. Polish-A `g` shortcut still focuses first row → subsequent
+    Esc/Backspace operate against the sidebar.
