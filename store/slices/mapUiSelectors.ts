@@ -43,7 +43,7 @@ export const useEntityHighlight = (entityCode: string) =>
  *   display names requires slice changes scheduled for Polish-B.
  * - Stale / unknown codes: `null`.
  */
-export const useRegionNameByIso = (iso: string): string | null => {
+export const getRegionNameByIso = (iso: string): string | null => {
   if (!iso.includes(':')) return null;
   const [iso2, stateCode] = iso.split(':');
   if (!iso2 || !stateCode) return null;
