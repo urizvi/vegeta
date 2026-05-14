@@ -6,6 +6,7 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import {
   useGeoNode, useGeoChildren, useActivePaintGeoId, useActions,
+  useIsGeoSelected,
 } from '@/hooks/useTerritoryStore';
 import ColorPickerPopover from './ColorPickerPopover';
 
@@ -16,15 +17,22 @@ interface GeoNodeRowProps {
   forceExpandIds: Set<string> | null;
   dragDisabled: boolean;
   descendantIds: Set<string>;
+  visibleOrder?: string[];
+  bulkDragActive?: boolean;
 }
 
 export default function GeoNodeRow({
   nodeId, depth, visibleIds, forceExpandIds, dragDisabled, descendantIds,
+  visibleOrder = [], bulkDragActive = false,
 }: GeoNodeRowProps) {
   const node = useGeoNode(nodeId);
   const children = useGeoChildren(nodeId);
   const activeId = useActivePaintGeoId();
-  const { addGeoNode, updateGeoNode, removeGeoNode, setActivePaintGeo } = useActions();
+  const isSelected = useIsGeoSelected(nodeId);
+  const {
+    addGeoNode, updateGeoNode, removeGeoNode, setActivePaintGeo,
+    toggleGeoSelection, extendGeoSelection, clearGeoSelection,
+  } = useActions();
   const [expanded, setExpanded] = useState(true);
   const [editingName, setEditingName] = useState(false);
   const [draftName, setDraftName] = useState('');
@@ -99,14 +107,29 @@ export default function GeoNodeRow({
         )}
 
         <div
-          onClick={() => setActivePaintGeo(isActive ? null : nodeId)}
+          onClick={(e) => {
+            if (e.metaKey || e.ctrlKey) {
+              e.preventDefault();
+              toggleGeoSelection(nodeId);
+              return;
+            }
+            if (e.shiftKey) {
+              e.preventDefault();
+              extendGeoSelection(nodeId, visibleOrder);
+              return;
+            }
+            clearGeoSelection();
+            setActivePaintGeo(isActive ? null : nodeId);
+          }}
           data-geo-node-row=""
           tabIndex={-1}
           className={`group flex items-center gap-1.5 rounded-md py-1 pr-1 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 ${
             isActive
               ? 'bg-indigo-100 text-indigo-900 dark:bg-indigo-950/60 dark:text-indigo-100'
-              : 'hover:bg-slate-200/60 dark:hover:bg-slate-800/60'
-          } ${isInvalidDropTarget ? 'opacity-30' : ''}`}
+              : isSelected
+                ? 'bg-brand-soft/60 ring-1 ring-brand/40'
+                : 'hover:bg-slate-200/60 dark:hover:bg-slate-800/60'
+          } ${isInvalidDropTarget ? 'opacity-30' : ''} ${bulkDragActive ? 'opacity-40' : ''}`}
           style={{ paddingLeft: 6 + depth * 14, cursor: 'pointer' }}
           role="button"
           aria-pressed={isActive}
@@ -238,6 +261,8 @@ export default function GeoNodeRow({
           forceExpandIds={forceExpandIds}
           dragDisabled={dragDisabled}
           descendantIds={descendantIds}
+          visibleOrder={visibleOrder}
+          bulkDragActive={false}
         />
       ))}
     </div>
