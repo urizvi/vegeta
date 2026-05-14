@@ -181,30 +181,28 @@ export const createGeoSlice: StateCreator<TerritoryStore, [], [], GeoSlice> = (s
 
   addGeoNode(name, parentId, color) {
     const id = crypto.randomUUID();
+    const node: GeoNode = {
+      id,
+      name,
+      color: color ?? null,
+      parentId,
+      countryCodes: [],
+      stateCodes: [],
+    };
     let sortIndex = 0;
     set((s) => {
       sortIndex = s.geoNodeOrder.length;
+      const op: GeoOp = { kind: 'add', node, sortIndex };
       return {
-        geoNodes: {
-          ...s.geoNodes,
-          [id]: {
-            id,
-            name,
-            color: color ?? null,
-            parentId,
-            countryCodes: [],
-            stateCodes: [],
-          },
-        },
+        geoNodes: { ...s.geoNodes, [id]: node },
         geoNodeOrder: [...s.geoNodeOrder, id],
+        geoOpUndoStack: [...s.geoOpUndoStack, op].slice(-MAX_UNDO),
+        geoOpRedoStack: [],
       };
     });
     fireWrite(
       `createGeoNode(${id})`,
-      directusWrite.createGeoNode(
-        { id, name, color: color ?? null, parentId, countryCodes: [], stateCodes: [] },
-        sortIndex,
-      ),
+      directusWrite.createGeoNode(node, sortIndex),
     );
     return id;
   },
@@ -619,6 +617,25 @@ export const createGeoSlice: StateCreator<TerritoryStore, [], [], GeoSlice> = (s
         };
       }
 
+      if (top.kind === 'add') {
+        if (!s.geoNodes[top.node.id]) {
+          return { geoOpUndoStack: nextUndo };
+        }
+        const nextNodes = { ...s.geoNodes };
+        delete nextNodes[top.node.id];
+        const nextOrder = s.geoNodeOrder.filter((nid) => nid !== top.node.id);
+        const nextActivePaint =
+          s.activePaintGeoId === top.node.id ? null : s.activePaintGeoId;
+        result.op = top;
+        return {
+          geoNodes: nextNodes,
+          geoNodeOrder: nextOrder,
+          activePaintGeoId: nextActivePaint,
+          geoOpUndoStack: nextUndo,
+          geoOpRedoStack: [...s.geoOpRedoStack, top].slice(-MAX_UNDO),
+        };
+      }
+
       // Other kinds not yet handled (added in T2-T6). Drop the entry from
       // the undo stack to avoid wedging the system; do NOT push to redo.
       return { geoOpUndoStack: nextUndo };
@@ -641,6 +658,11 @@ export const createGeoSlice: StateCreator<TerritoryStore, [], [], GeoSlice> = (s
         fireWrite(
           `undo color(${op.id})`,
           directusWrite.updateGeoNodeRemote(op.id, { color: op.before }),
+        );
+      } else if (op.kind === 'add') {
+        fireWrite(
+          `undo add(${op.node.id})`,
+          directusWrite.deleteGeoNodes([op.node.id]),
         );
       }
     }
@@ -708,6 +730,23 @@ export const createGeoSlice: StateCreator<TerritoryStore, [], [], GeoSlice> = (s
         };
       }
 
+      if (top.kind === 'add') {
+        if (s.geoNodes[top.node.id]) {
+          // Already present; drop the redo entry without re-applying.
+          return { geoOpRedoStack: nextRedo };
+        }
+        const nextOrder = [...s.geoNodeOrder];
+        const insertAt = Math.min(top.sortIndex, nextOrder.length);
+        nextOrder.splice(insertAt, 0, top.node.id);
+        result.op = top;
+        return {
+          geoNodes: { ...s.geoNodes, [top.node.id]: top.node },
+          geoNodeOrder: nextOrder,
+          geoOpRedoStack: nextRedo,
+          geoOpUndoStack: [...s.geoOpUndoStack, top].slice(-MAX_UNDO),
+        };
+      }
+
       return { geoOpRedoStack: nextRedo };
     });
     const op = result.op;
@@ -728,6 +767,11 @@ export const createGeoSlice: StateCreator<TerritoryStore, [], [], GeoSlice> = (s
         fireWrite(
           `redo color(${op.id})`,
           directusWrite.updateGeoNodeRemote(op.id, { color: op.after }),
+        );
+      } else if (op.kind === 'add') {
+        fireWrite(
+          `redo add(${op.node.id})`,
+          directusWrite.createGeoNode(op.node, op.sortIndex),
         );
       }
     }
