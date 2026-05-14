@@ -56,7 +56,7 @@ export default function Toolbar({ drillDownCountryName }: ToolbarProps) {
   const {
     setActiveView, setDrillDownCountryCode, setMapTheme,
     toggleShowAccounts, setMapAccountMetric, setActivePaintGeo, setActiveEraser, setActiveSelect,
-    undoGeoAssignment, redoGeoAssignment, toggleShowLabels, clearSelection, setMapZoomCommand,
+    undoGeoOp, redoGeoOp, toggleShowLabels, clearSelection, setMapZoomCommand,
   } = useActions();
   const [helpOpen, setHelpOpen] = useState(false);
   const selectionCount = useSelectionCount();
@@ -123,17 +123,17 @@ export default function Toolbar({ drillDownCountryName }: ToolbarProps) {
       if (!withCmdKey) return;
       if (e.key === 'z' && !e.shiftKey) {
         e.preventDefault();
-        undoGeoAssignment();
+        undoGeoOp();
       } else if ((e.key === 'z' && e.shiftKey) || e.key === 'y') {
         e.preventDefault();
-        redoGeoAssignment();
+        redoGeoOp();
       }
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [
     paintGeo, eraserActive, helpOpen, selectionCount,
-    setActivePaintGeo, setActiveEraser, undoGeoAssignment, redoGeoAssignment,
+    setActivePaintGeo, setActiveEraser, undoGeoOp, redoGeoOp,
     clearSelection, setMapZoomCommand,
   ]);
 
@@ -278,22 +278,22 @@ export default function Toolbar({ drillDownCountryName }: ToolbarProps) {
       {/* Undo / redo */}
       <div className="flex items-center gap-0.5 rounded-md border border-hairline bg-panel/60 p-0.5">
         <button
-          onClick={undoGeoAssignment}
+          onClick={undoGeoOp}
           disabled={!canUndo}
           className="flex h-6 w-6 items-center justify-center rounded text-ink-muted transition-colors hover:bg-sunken hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
-          title="Undo Geo assignment (⌘Z)"
-          aria-label="Undo Geo assignment"
+          title="Undo (⌘Z)"
+          aria-label="Undo"
         >
           <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="currentColor">
             <path d="M5.78 3.22a.75.75 0 010 1.06L3.81 6.25H8.5a4.5 4.5 0 010 9H4.75a.75.75 0 010-1.5H8.5a3 3 0 100-6H3.81l1.97 1.97a.75.75 0 01-1.06 1.06L1.47 7.53a.75.75 0 010-1.06l3.25-3.25a.75.75 0 011.06 0z" />
           </svg>
         </button>
         <button
-          onClick={redoGeoAssignment}
+          onClick={redoGeoOp}
           disabled={!canRedo}
           className="flex h-6 w-6 items-center justify-center rounded text-ink-muted transition-colors hover:bg-sunken hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
-          title="Redo Geo assignment (⇧⌘Z)"
-          aria-label="Redo Geo assignment"
+          title="Redo (⇧⌘Z)"
+          aria-label="Redo"
         >
           <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="currentColor">
             <path d="M10.22 3.22a.75.75 0 011.06 0l3.25 3.25a.75.75 0 010 1.06l-3.25 3.25a.75.75 0 11-1.06-1.06l1.97-1.97H7.5a3 3 0 100 6h3.75a.75.75 0 010 1.5H7.5a4.5 4.5 0 010-9h4.69l-1.97-1.97a.75.75 0 010-1.06z" />

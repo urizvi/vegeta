@@ -15,6 +15,29 @@ interface NodeCodesPatch {
 
 const MAX_UNDO = 50;
 
+type GeoOp =
+  | { kind: 'paint'; patches: NodeCodesPatch[] }
+  | { kind: 'rename'; id: string; before: string; after: string }
+  | { kind: 'color'; id: string; before: string | null; after: string | null }
+  | { kind: 'add'; node: GeoNode; sortIndex: number }
+  | {
+      kind: 'remove';
+      mode: 'cascade' | 'reparent-children';
+      removedNodes: GeoNode[];
+      orderIndices: Record<string, number>;
+      liftedChildren?: Array<{ id: string; beforeParentId: string }>;
+    }
+  | {
+      kind: 'reorder';
+      parentChanges: Array<{
+        id: string;
+        beforeParentId: string | null;
+        afterParentId: string | null;
+      }>;
+      beforeOrder: string[];
+      afterOrder: string[];
+    };
+
 function diffNodesByCodes(
   prev: Record<string, GeoNode>,
   next: Record<string, GeoNode>,
@@ -47,8 +70,8 @@ export interface GeoSlice {
   activePaintGeoId: string | null;
   activeEraser: boolean;
   selectActive: boolean;
-  geoUndoStack: NodeCodesPatch[][]; // each entry is one op (multi-node)
-  geoRedoStack: NodeCodesPatch[][];
+  geoOpUndoStack: GeoOp[];
+  geoOpRedoStack: GeoOp[];
 
   addGeoNode: (name: string, parentId: string | null, color?: string | null) => string;
   updateGeoNode: (id: string, patch: Partial<Pick<GeoNode, 'name' | 'color'>>) => void;
@@ -79,8 +102,8 @@ export interface GeoSlice {
   setActiveEraser: (active: boolean) => void;
   setActiveSelect: (active: boolean) => void;
 
-  undoGeoAssignment: () => void;
-  redoGeoAssignment: () => void;
+  undoGeoOp: () => void;
+  redoGeoOp: () => void;
 
   hydrateGeoNodes: (nodes: GeoNode[], order: string[]) => void;
 }
@@ -153,8 +176,8 @@ export const createGeoSlice: StateCreator<TerritoryStore, [], [], GeoSlice> = (s
   activePaintGeoId: null,
   activeEraser: false,
   selectActive: false,
-  geoUndoStack: [],
-  geoRedoStack: [],
+  geoOpUndoStack: [],
+  geoOpRedoStack: [],
 
   addGeoNode(name, parentId, color) {
     const id = crypto.randomUUID();
@@ -429,8 +452,9 @@ export const createGeoSlice: StateCreator<TerritoryStore, [], [], GeoSlice> = (s
         [geoNodeId]: { ...target, countryCodes: [...target.countryCodes, countryCode] },
       };
       changed = diffNodesByCodes(s.geoNodes, next);
-      const undo = [...s.geoUndoStack, changed].slice(-MAX_UNDO);
-      return { geoNodes: next, geoUndoStack: undo, geoRedoStack: [] };
+      const op: GeoOp = { kind: 'paint', patches: changed };
+      const undo = [...s.geoOpUndoStack, op].slice(-MAX_UNDO);
+      return { geoNodes: next, geoOpUndoStack: undo, geoOpRedoStack: [] };
     });
     for (const c of changed) {
       fireWrite(
@@ -451,8 +475,9 @@ export const createGeoSlice: StateCreator<TerritoryStore, [], [], GeoSlice> = (s
         [geoNodeId]: { ...target, stateCodes: [...target.stateCodes, stateCode] },
       };
       changed = diffNodesByCodes(s.geoNodes, next);
-      const undo = [...s.geoUndoStack, changed].slice(-MAX_UNDO);
-      return { geoNodes: next, geoUndoStack: undo, geoRedoStack: [] };
+      const op: GeoOp = { kind: 'paint', patches: changed };
+      const undo = [...s.geoOpUndoStack, op].slice(-MAX_UNDO);
+      return { geoNodes: next, geoOpUndoStack: undo, geoOpRedoStack: [] };
     });
     for (const c of changed) {
       fireWrite(
@@ -468,8 +493,9 @@ export const createGeoSlice: StateCreator<TerritoryStore, [], [], GeoSlice> = (s
       const next = withCountryRemoved(s.geoNodes, countryCode);
       changed = diffNodesByCodes(s.geoNodes, next);
       if (changed.length === 0) return s;
-      const undo = [...s.geoUndoStack, changed].slice(-MAX_UNDO);
-      return { geoNodes: next, geoUndoStack: undo, geoRedoStack: [] };
+      const op: GeoOp = { kind: 'paint', patches: changed };
+      const undo = [...s.geoOpUndoStack, op].slice(-MAX_UNDO);
+      return { geoNodes: next, geoOpUndoStack: undo, geoOpRedoStack: [] };
     });
     for (const c of changed) {
       fireWrite(
@@ -485,8 +511,9 @@ export const createGeoSlice: StateCreator<TerritoryStore, [], [], GeoSlice> = (s
       const next = withStateRemoved(s.geoNodes, stateCode);
       changed = diffNodesByCodes(s.geoNodes, next);
       if (changed.length === 0) return s;
-      const undo = [...s.geoUndoStack, changed].slice(-MAX_UNDO);
-      return { geoNodes: next, geoUndoStack: undo, geoRedoStack: [] };
+      const op: GeoOp = { kind: 'paint', patches: changed };
+      const undo = [...s.geoOpUndoStack, op].slice(-MAX_UNDO);
+      return { geoNodes: next, geoOpUndoStack: undo, geoOpRedoStack: [] };
     });
     for (const c of changed) {
       fireWrite(
@@ -511,34 +538,43 @@ export const createGeoSlice: StateCreator<TerritoryStore, [], [], GeoSlice> = (s
     else set({ selectActive: false });
   },
 
-  undoGeoAssignment() {
-    let appliedPatch: NodeCodesPatch[] | null = null;
+  undoGeoOp() {
+    const result: { op: GeoOp | null } = { op: null };
     set((s) => {
-      const stack = s.geoUndoStack;
+      const stack = s.geoOpUndoStack;
       if (stack.length === 0) return s;
-      const patch = stack[stack.length - 1];
-      // Skip patches whose nodes no longer exist (e.g. node was deleted post-paint).
-      const live = patch.filter((p) => s.geoNodes[p.id]);
-      if (live.length === 0) {
-        return { geoUndoStack: stack.slice(0, -1) };
-      }
-      const nextNodes = { ...s.geoNodes };
-      for (const p of live) {
-        nextNodes[p.id] = {
-          ...nextNodes[p.id],
-          countryCodes: p.before.countryCodes,
-          stateCodes: p.before.stateCodes,
+      const top = stack[stack.length - 1];
+      const nextUndo = stack.slice(0, -1);
+
+      if (top.kind === 'paint') {
+        const live = top.patches.filter((p) => s.geoNodes[p.id]);
+        if (live.length === 0) {
+          return { geoOpUndoStack: nextUndo };
+        }
+        const nextNodes = { ...s.geoNodes };
+        for (const p of live) {
+          nextNodes[p.id] = {
+            ...nextNodes[p.id],
+            countryCodes: p.before.countryCodes,
+            stateCodes: p.before.stateCodes,
+          };
+        }
+        const op: GeoOp = { kind: 'paint', patches: live };
+        result.op = op;
+        return {
+          geoNodes: nextNodes,
+          geoOpUndoStack: nextUndo,
+          geoOpRedoStack: [...s.geoOpRedoStack, op].slice(-MAX_UNDO),
         };
       }
-      appliedPatch = live;
-      return {
-        geoNodes: nextNodes,
-        geoUndoStack: stack.slice(0, -1),
-        geoRedoStack: [...s.geoRedoStack, live].slice(-MAX_UNDO),
-      };
+
+      // Other kinds not yet handled (added in T2-T6). Drop the entry from
+      // the undo stack to avoid wedging the system; do NOT push to redo.
+      return { geoOpUndoStack: nextUndo };
     });
-    if (appliedPatch) {
-      for (const c of appliedPatch as NodeCodesPatch[]) {
+    const op = result.op;
+    if (op && op.kind === 'paint') {
+      for (const c of op.patches) {
         fireWrite(
           `undo updateGeoNode(${c.id})`,
           directusWrite.updateGeoNodeRemote(c.id, c.before),
@@ -547,33 +583,41 @@ export const createGeoSlice: StateCreator<TerritoryStore, [], [], GeoSlice> = (s
     }
   },
 
-  redoGeoAssignment() {
-    let appliedPatch: NodeCodesPatch[] | null = null;
+  redoGeoOp() {
+    const result: { op: GeoOp | null } = { op: null };
     set((s) => {
-      const stack = s.geoRedoStack;
+      const stack = s.geoOpRedoStack;
       if (stack.length === 0) return s;
-      const patch = stack[stack.length - 1];
-      const live = patch.filter((p) => s.geoNodes[p.id]);
-      if (live.length === 0) {
-        return { geoRedoStack: stack.slice(0, -1) };
-      }
-      const nextNodes = { ...s.geoNodes };
-      for (const p of live) {
-        nextNodes[p.id] = {
-          ...nextNodes[p.id],
-          countryCodes: p.after.countryCodes,
-          stateCodes: p.after.stateCodes,
+      const top = stack[stack.length - 1];
+      const nextRedo = stack.slice(0, -1);
+
+      if (top.kind === 'paint') {
+        const live = top.patches.filter((p) => s.geoNodes[p.id]);
+        if (live.length === 0) {
+          return { geoOpRedoStack: nextRedo };
+        }
+        const nextNodes = { ...s.geoNodes };
+        for (const p of live) {
+          nextNodes[p.id] = {
+            ...nextNodes[p.id],
+            countryCodes: p.after.countryCodes,
+            stateCodes: p.after.stateCodes,
+          };
+        }
+        const op: GeoOp = { kind: 'paint', patches: live };
+        result.op = op;
+        return {
+          geoNodes: nextNodes,
+          geoOpRedoStack: nextRedo,
+          geoOpUndoStack: [...s.geoOpUndoStack, op].slice(-MAX_UNDO),
         };
       }
-      appliedPatch = live;
-      return {
-        geoNodes: nextNodes,
-        geoRedoStack: stack.slice(0, -1),
-        geoUndoStack: [...s.geoUndoStack, live].slice(-MAX_UNDO),
-      };
+
+      return { geoOpRedoStack: nextRedo };
     });
-    if (appliedPatch) {
-      for (const c of appliedPatch as NodeCodesPatch[]) {
+    const op = result.op;
+    if (op && op.kind === 'paint') {
+      for (const c of op.patches) {
         fireWrite(
           `redo updateGeoNode(${c.id})`,
           directusWrite.updateGeoNodeRemote(c.id, c.after),
@@ -585,6 +629,6 @@ export const createGeoSlice: StateCreator<TerritoryStore, [], [], GeoSlice> = (s
   hydrateGeoNodes(nodes, order) {
     const map: Record<string, GeoNode> = {};
     nodes.forEach((n) => { map[n.id] = n; });
-    set({ geoNodes: map, geoNodeOrder: order, geoUndoStack: [], geoRedoStack: [] });
+    set({ geoNodes: map, geoNodeOrder: order, geoOpUndoStack: [], geoOpRedoStack: [] });
   },
 });

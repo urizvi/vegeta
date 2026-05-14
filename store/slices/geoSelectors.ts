@@ -23,8 +23,8 @@ export const useActivePaintGeo = () =>
 export const useActiveEraser = () => useTerritoryStore((s) => s.activeEraser);
 export const useActiveSelect = () => useTerritoryStore((s) => s.selectActive);
 
-export const useCanUndoGeo = () => useTerritoryStore((s) => s.geoUndoStack.length > 0);
-export const useCanRedoGeo = () => useTerritoryStore((s) => s.geoRedoStack.length > 0);
+export const useCanUndoGeo = () => useTerritoryStore((s) => s.geoOpUndoStack.length > 0);
+export const useCanRedoGeo = () => useTerritoryStore((s) => s.geoOpRedoStack.length > 0);
 
 /** Resolve a node's effective color by walking up to the nearest ancestor with a non-null color. */
 export const useGeoNodeEffectiveColor = (id: string | null): string | null =>
