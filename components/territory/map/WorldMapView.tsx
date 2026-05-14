@@ -16,9 +16,13 @@ import PinnedRegionCard from './PinnedRegionCard';
 import MapTooltip from './MapTooltip';
 import { WorldAccountLayer } from './AccountLayer';
 import MapLabels from './MapLabels';
+import { useCameraAnimation, type CameraAnimationTarget } from '@/lib/useCameraAnimation';
 
 interface WorldMapViewProps {
   onDrillDown: (iso2: string, name: string) => void;
+  cameraTarget?: CameraAnimationTarget & { durationMs: number };
+  onCameraSettled?: () => void;
+  className?: string;
 }
 
 // geo from Geographies has svgPath set + all CountryFeature fields spread onto it
@@ -93,7 +97,7 @@ const CountryGeo = memo(function CountryGeo({
   );
 });
 
-export default function WorldMapView({ onDrillDown }: WorldMapViewProps) {
+export default function WorldMapView({ onDrillDown, cameraTarget, onCameraSettled, className }: WorldMapViewProps) {
   const countries = useGeoData();
   const theme = useMapTheme();
   const activePaintId = useActivePaintGeoId();
@@ -109,12 +113,21 @@ export default function WorldMapView({ onDrillDown }: WorldMapViewProps) {
   const zoomCommand = useMapZoomCommand();
   const { setMapZoomCommand } = useActions();
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
-  const [zoom, setZoom] = useState(1);
+  const camera = useCameraAnimation([0, 20], 1);
+  const { center, zoom, setCenter, setZoom } = camera;
   const zoomRef = useRef(zoom);
   useEffect(() => { zoomRef.current = zoom; }, [zoom]);
-  const [center, setCenter] = useState<[number, number]>([0, 20]);
   const centerRef = useRef<[number, number]>(center);
   useEffect(() => { centerRef.current = center; }, [center]);
+  useEffect(() => {
+    if (!cameraTarget) return;
+    camera.animateTo(
+      { center: cameraTarget.center, zoom: cameraTarget.zoom },
+      cameraTarget.durationMs,
+      onCameraSettled,
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cameraTarget, onCameraSettled]);
   const [lasso, setLasso] = useState<{ x0: number; y0: number; x1: number; y1: number; shift: boolean } | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const projectionRef = useRef<GeoProjection | null>(null);
@@ -140,7 +153,7 @@ export default function WorldMapView({ onDrillDown }: WorldMapViewProps) {
       const dLat = (zoomCommand.dy * 180) / (551 * z);
       setCenter([lng - dLng, lat + dLat]);
     } else if (zoomCommand.kind === 'zoomBy') {
-      setZoom((z) => Math.min(Math.max(z * zoomCommand.factor, 1), 8));
+      setZoom(Math.min(Math.max(zoomRef.current * zoomCommand.factor, 1), 8));
     } else if (zoomCommand.kind === 'reset') {
       setZoom(1);
       setCenter([0, 20]);
@@ -199,7 +212,7 @@ export default function WorldMapView({ onDrillDown }: WorldMapViewProps) {
     if (!geo) return;
     const [lng, lat] = geoCentroid(geo as unknown as GeoJSON.Feature);
     setCenter([lng, lat]);
-    setZoom((z) => Math.min(z * 2.5, 8));
+    setZoom(Math.min(zoomRef.current * 2.5, 8));
   }, []);
 
   const handleLassoMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
@@ -275,7 +288,7 @@ export default function WorldMapView({ onDrillDown }: WorldMapViewProps) {
   return (
     <div
       ref={containerRef}
-      className="absolute inset-0"
+      className={`absolute inset-0 ${className ?? ''}`}
       style={{ background: theme.sphereFill, cursor }}
       onMouseMove={(e) => { handleMouseMove(e); handleLassoMouseMove(e); }}
       onMouseDown={handleLassoMouseDown}
@@ -375,7 +388,7 @@ export default function WorldMapView({ onDrillDown }: WorldMapViewProps) {
       {/* Zoom controls — single rounded panel with internal hairlines */}
       <div className="absolute right-4 top-4 z-10 flex flex-col overflow-hidden rounded-xl border border-hairline bg-panel/85 shadow-md backdrop-blur-md divide-y divide-hairline">
         <button
-          onClick={() => setZoom((z) => Math.min(z * 1.5, 8))}
+          onClick={() => setZoom(Math.min(zoomRef.current * 1.5, 8))}
           className={theme.zoomBtnClass}
           aria-label="Zoom in"
         >
@@ -384,7 +397,7 @@ export default function WorldMapView({ onDrillDown }: WorldMapViewProps) {
           </svg>
         </button>
         <button
-          onClick={() => setZoom((z) => Math.max(z / 1.5, 1))}
+          onClick={() => setZoom(Math.max(zoomRef.current / 1.5, 1))}
           className={theme.zoomBtnClass}
           aria-label="Zoom out"
         >
