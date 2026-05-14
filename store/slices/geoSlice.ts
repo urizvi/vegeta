@@ -603,6 +603,22 @@ export const createGeoSlice: StateCreator<TerritoryStore, [], [], GeoSlice> = (s
         };
       }
 
+      if (top.kind === 'color') {
+        if (!s.geoNodes[top.id]) {
+          return { geoOpUndoStack: nextUndo };
+        }
+        const nextNodes = {
+          ...s.geoNodes,
+          [top.id]: { ...s.geoNodes[top.id], color: top.before },
+        };
+        result.op = top;
+        return {
+          geoNodes: nextNodes,
+          geoOpUndoStack: nextUndo,
+          geoOpRedoStack: [...s.geoOpRedoStack, top].slice(-MAX_UNDO),
+        };
+      }
+
       // Other kinds not yet handled (added in T2-T6). Drop the entry from
       // the undo stack to avoid wedging the system; do NOT push to redo.
       return { geoOpUndoStack: nextUndo };
@@ -620,6 +636,11 @@ export const createGeoSlice: StateCreator<TerritoryStore, [], [], GeoSlice> = (s
         fireWrite(
           `undo rename(${op.id})`,
           directusWrite.updateGeoNodeRemote(op.id, { name: op.before }),
+        );
+      } else if (op.kind === 'color') {
+        fireWrite(
+          `undo color(${op.id})`,
+          directusWrite.updateGeoNodeRemote(op.id, { color: op.before }),
         );
       }
     }
@@ -671,6 +692,22 @@ export const createGeoSlice: StateCreator<TerritoryStore, [], [], GeoSlice> = (s
         };
       }
 
+      if (top.kind === 'color') {
+        if (!s.geoNodes[top.id]) {
+          return { geoOpRedoStack: nextRedo };
+        }
+        const nextNodes = {
+          ...s.geoNodes,
+          [top.id]: { ...s.geoNodes[top.id], color: top.after },
+        };
+        result.op = top;
+        return {
+          geoNodes: nextNodes,
+          geoOpRedoStack: nextRedo,
+          geoOpUndoStack: [...s.geoOpUndoStack, top].slice(-MAX_UNDO),
+        };
+      }
+
       return { geoOpRedoStack: nextRedo };
     });
     const op = result.op;
@@ -686,6 +723,11 @@ export const createGeoSlice: StateCreator<TerritoryStore, [], [], GeoSlice> = (s
         fireWrite(
           `redo rename(${op.id})`,
           directusWrite.updateGeoNodeRemote(op.id, { name: op.after }),
+        );
+      } else if (op.kind === 'color') {
+        fireWrite(
+          `redo color(${op.id})`,
+          directusWrite.updateGeoNodeRemote(op.id, { color: op.after }),
         );
       }
     }
