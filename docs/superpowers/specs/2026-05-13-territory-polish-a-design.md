@@ -64,7 +64,7 @@ Add a new chip:
     calls `clearSelection()` and closes the popover.
   - Body: vertical list of selected codes. Each row shows the iso
     code as the primary label (`"US"` or `"US:US-CA"`). For state
-    codes, a best-effort name resolver `useRegionNameByIso(iso)` (new,
+    codes, a best-effort name resolver `getRegionNameByIso(iso)` (new,
     in `store/slices/mapUiSelectors.ts`) splits on `:`, looks the
     state code up in `getStatesForCountry(iso2)` from
     `lib/stateLoader.ts`, and returns the state's `name` if cached.
@@ -135,7 +135,7 @@ selectionSlice ──► useSelectionCount, useSelectedEntityCodes
               SelectionChip ───► MapChip (existing)
                       │
                       ▼
-              popover: list ◄── useRegionNameByIso(code)
+              popover: list ◄── getRegionNameByIso(code)
                                     (new lightweight selector)
 
 Toolbar keydown ───► / → document.getElementById('geo-sidebar-search')
@@ -151,7 +151,7 @@ New:
 
 Modified:
 - `components/territory/map/MapChipsDock.tsx` — mount `<SelectionChip />` after existing chips.
-- `store/slices/mapUiSelectors.ts` — add `useRegionNameByIso(iso)`.
+- `store/slices/mapUiSelectors.ts` — add `getRegionNameByIso(iso)`.
 - `components/territory/toolbar/Toolbar.tsx` — add `/` and `g` cases.
 - `components/territory/map/MapHelpPopover.tsx` — append two rows.
 - `components/territory/sidebar/SidebarSearchInput.tsx` — `id` prop.
@@ -171,10 +171,10 @@ Modified:
   matches the existing pattern of chip self-dismiss when state goes
   empty.
 - Selection contains a mix of country (`'US'`) and state
-  (`'US:US-CA'`) codes: `useRegionNameByIso` resolves both. State
+  (`'US:US-CA'`) codes: `getRegionNameByIso` resolves both. State
   codes resolve to the state's `name` (e.g. `"California"`).
 - Code in selection that no longer matches any region (stale, e.g.
-  data refresh removed it): `useRegionNameByIso` returns `null` and
+  data refresh removed it): `getRegionNameByIso` returns `null` and
   the row renders only the code. User can still click `✕` to remove.
 - State code present but `stateLoader` cache empty (no drill-down has
   happened yet this session): name resolution returns `null`, row

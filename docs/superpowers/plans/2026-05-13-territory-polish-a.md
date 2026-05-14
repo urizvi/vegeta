@@ -4,7 +4,7 @@
 
 **Goal:** Add a `SelectionChip` in `MapChipsDock` so the multi-region selection count and contents are visible from the map; add `/` and `g` keyboard shortcuts for focusing the Geos sidebar search and tree.
 
-**Architecture:** New `SelectionChip` consumes existing `selectionSlice` selectors and reuses the `MapChip` + `ChipWithPopover` idioms. A new best-effort `useRegionNameByIso` selector resolves state names from `stateLoader.ts`'s existing cache (country names deferred to Polish-B). Toolbar extends its existing keydown switch with two bare-key cases targeting a stable `id` on `SidebarSearchInput` and a `data-geo-node-row` attribute on `GeoNodeRow`.
+**Architecture:** New `SelectionChip` consumes existing `selectionSlice` selectors and reuses the `MapChip` + `ChipWithPopover` idioms. A new best-effort `getRegionNameByIso` selector resolves state names from `stateLoader.ts`'s existing cache (country names deferred to Polish-B). Toolbar extends its existing keydown switch with two bare-key cases targeting a stable `id` on `SidebarSearchInput` and a `data-geo-node-row` attribute on `GeoNodeRow`.
 
 **Tech Stack:** Next.js 16 (App Router), React 19, TypeScript, Zustand, Tailwind v4. No test framework configured — verification is `npx tsc --noEmit`, `npm run lint`, `npm run build`, plus user manual smoke per task.
 
@@ -18,7 +18,7 @@ New:
 - `components/territory/map/SelectionChip.tsx` — chip + popover for the active selection set.
 
 Modified:
-- `store/slices/mapUiSelectors.ts` — adds `useRegionNameByIso(iso)`.
+- `store/slices/mapUiSelectors.ts` — adds `getRegionNameByIso(iso)`.
 - `components/territory/map/MapChipsDock.tsx` — adds `'selection'` to `OpenChip`, mounts `<SelectionChip />`.
 - `components/territory/toolbar/Toolbar.tsx` — adds `/` and `g` cases to existing keydown handler.
 - `components/territory/map/MapHelpPopover.tsx` — appends two rows.
@@ -30,7 +30,7 @@ No slice schema changes. No new dependencies.
 
 ---
 
-## Task 1: `useRegionNameByIso` selector
+## Task 1: `getRegionNameByIso` selector
 
 **Files:**
 - Modify: `store/slices/mapUiSelectors.ts` (append below existing exports, before the `RegionRollup` block — around line 35)
@@ -51,7 +51,7 @@ import { getStatesForCountry } from '@/lib/stateLoader';
  *   display names requires slice changes scheduled for Polish-B.
  * - Stale / unknown codes: `null`.
  */
-export const useRegionNameByIso = (iso: string): string | null => {
+export const getRegionNameByIso = (iso: string): string | null => {
   // Subscribe to nothing — stateLoader cache is module-scoped and
   // populated as a side effect of drill-down. Selection popover
   // re-renders when selectedEntityCodes changes (its parent
@@ -82,7 +82,7 @@ Expected: clean exit.
 
 ```bash
 git add store/slices/mapUiSelectors.ts
-git commit -m "feat(territory): add useRegionNameByIso best-effort state name resolver"
+git commit -m "feat(territory): add getRegionNameByIso best-effort state name resolver"
 ```
 
 ---
@@ -103,7 +103,7 @@ import {
   useSelectedEntityCodes,
   useSelectionCount,
 } from '@/store/slices/selectionSelectors';
-import { useRegionNameByIso } from '@/store/slices/mapUiSelectors';
+import { getRegionNameByIso } from '@/store/slices/mapUiSelectors';
 import MapChip from './MapChip';
 
 interface Props {
@@ -171,7 +171,7 @@ export function SelectionChipPopover() {
 }
 
 function SelectionRow({ code, onRemove }: { code: string; onRemove: () => void }) {
-  const name = useRegionNameByIso(code);
+  const name = getRegionNameByIso(code);
   return (
     <li className="flex items-center gap-2 rounded px-1 py-0.5 hover:bg-canvas">
       <span className="flex-1 truncate text-[12px]">
@@ -587,7 +587,7 @@ Plan: `docs/superpowers/plans/2026-05-13-territory-polish-a.md`
   Visible only when `useSelectionCount() > 0`. Popover lists selected
   codes with best-effort state names; per-row ✕ removes via
   `toggleSelection`; footer `Clear` calls `clearSelection`.
-- `store/slices/mapUiSelectors.ts` — `useRegionNameByIso(iso)` resolves
+- `store/slices/mapUiSelectors.ts` — `getRegionNameByIso(iso)` resolves
   state codes (`"A:B"`) against `stateLoader`'s existing cache; returns
   `null` for country codes and stale lookups. Country-name capture is
   deferred to Polish-B.
@@ -610,7 +610,7 @@ Plan: `docs/superpowers/plans/2026-05-13-territory-polish-a.md`
 
 ### Deviations from spec
 
-Spec proposed name resolution via a generic `useRegionNameByIso` that
+Spec proposed name resolution via a generic `getRegionNameByIso` that
 would cover both countries and states. Implementation scopes it to
 states only (the only source with a ready-made name cache); country
 display names are deferred to Polish-B where the selection slice will
@@ -633,6 +633,6 @@ git commit -m "docs: log polish-A shipped (selection chip + / and g shortcuts)"
 
 ## Self-Review Notes
 
-- **Spec coverage**: chip + popover (T2, T3), `useRegionNameByIso` (T1), `/` shortcut (T6), `g` shortcut (T6), search-input `id` (T4), `data-geo-node-row` (T5), help-popover rows (T7). All covered.
+- **Spec coverage**: chip + popover (T2, T3), `getRegionNameByIso` (T1), `/` shortcut (T6), `g` shortcut (T6), search-input `id` (T4), `data-geo-node-row` (T5), help-popover rows (T7). All covered.
 - **Placeholder scan**: clean — every step has the exact code or command.
-- **Type consistency**: `OpenChip` extended in T3 to match the `'selection'` literal used in T2's `onToggle` consumer; selectors imported in T2 (`useSelectedEntityCodes`, `useSelectionCount`) match existing exports in `store/slices/selectionSelectors.ts`; `useRegionNameByIso` signature `(iso: string) => string | null` is used identically in T1 (definition) and T2 (consumer).
+- **Type consistency**: `OpenChip` extended in T3 to match the `'selection'` literal used in T2's `onToggle` consumer; selectors imported in T2 (`useSelectedEntityCodes`, `useSelectionCount`) match existing exports in `store/slices/selectionSelectors.ts`; `getRegionNameByIso` signature `(iso: string) => string | null` is used identically in T1 (definition) and T2 (consumer).
