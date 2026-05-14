@@ -18,6 +18,7 @@ import WorkspaceSwitcher from '@/components/WorkspaceSwitcher';
 import { useEntityNoun } from '@/hooks/useEntityNoun';
 import { useModuleEnabled } from '@/hooks/useModuleEnabled';
 import { MapHelpPopover } from '@/components/territory/map/MapHelpPopover';
+import { isEditableTarget } from '@/lib/isEditableTarget';
 
 interface ToolbarProps {
   drillDownCountryName: string | null;
@@ -61,11 +62,6 @@ export default function Toolbar({ drillDownCountryName }: ToolbarProps) {
   const selectionCount = useSelectionCount();
 
   useEffect(() => {
-    function isEditableTarget(t: EventTarget | null): boolean {
-      if (!(t instanceof HTMLElement)) return false;
-      const tag = t.tagName;
-      return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || t.isContentEditable;
-    }
     function onKey(e: KeyboardEvent) {
       if (isEditableTarget(e.target)) return;
 
