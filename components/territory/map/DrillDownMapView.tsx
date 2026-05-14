@@ -17,10 +17,14 @@ import MapChipsDock from './MapChipsDock';
 import PinnedRegionCard from './PinnedRegionCard';
 import MapTooltip from './MapTooltip';
 import MapLabels from './MapLabels';
+import { useCameraAnimation, type CameraAnimationTarget } from '@/lib/useCameraAnimation';
 
 interface DrillDownMapViewProps {
   countryIso2: string;
   countryName: string;
+  cameraTarget?: CameraAnimationTarget & { durationMs: number };
+  onCameraSettled?: () => void;
+  className?: string;
 }
 
 interface EnrichedStateGeo {
@@ -123,7 +127,7 @@ function fitFeatures(features: StateFeature[]): { center: [number, number]; zoom
 const isAlbersUsa = (iso2: string) => iso2 === 'US';
 const useSolidBackdrop = (iso2: string) => iso2 === 'US' || iso2 === 'CA';
 
-export default function DrillDownMapView({ countryIso2, countryName }: DrillDownMapViewProps) {
+export default function DrillDownMapView({ countryIso2, countryName, cameraTarget, onCameraSettled, className }: DrillDownMapViewProps) {
   const { features, loading, error } = useCountryStates(countryIso2);
   const theme = useMapTheme();
   const activePaintId = useActivePaintGeoId();
@@ -166,10 +170,10 @@ export default function DrillDownMapView({ countryIso2, countryName }: DrillDown
   );
   const [prevInitialZoom, setPrevInitialZoom] = useState(initialZoom);
   const [prevCenter, setPrevCenter] = useState(center);
-  const [zoom, setZoom] = useState(initialZoom);
+  const camera = useCameraAnimation(center, initialZoom);
+  const { center: currentCenter, zoom, setCenter: setCurrentCenter, setZoom } = camera;
   const zoomRef = useRef(zoom);
   useEffect(() => { zoomRef.current = zoom; }, [zoom]);
-  const [currentCenter, setCurrentCenter] = useState<[number, number]>(center);
   const currentCenterRef = useRef<[number, number]>(currentCenter);
   useEffect(() => { currentCenterRef.current = currentCenter; }, [currentCenter]);
   const initialZoomRef = useRef(initialZoom);
@@ -187,6 +191,16 @@ export default function DrillDownMapView({ countryIso2, countryName }: DrillDown
   }
 
   useEffect(() => {
+    if (!cameraTarget) return;
+    camera.animateTo(
+      { center: cameraTarget.center, zoom: cameraTarget.zoom },
+      cameraTarget.durationMs,
+      onCameraSettled,
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cameraTarget, onCameraSettled]);
+
+  useEffect(() => {
     if (!zoomCommand) return;
     if (zoomCommand.kind === 'panBy') {
       const [lng, lat] = currentCenterRef.current;
@@ -196,7 +210,7 @@ export default function DrillDownMapView({ countryIso2, countryName }: DrillDown
       const dLat = (zoomCommand.dy * 180) / (h * z);
       setCurrentCenter([lng - dLng, lat + dLat]);
     } else if (zoomCommand.kind === 'zoomBy') {
-      setZoom((z) => Math.min(Math.max(z * zoomCommand.factor, initialZoomRef.current), 80));
+      setZoom(Math.min(Math.max(zoomRef.current * zoomCommand.factor, initialZoomRef.current), 80));
     } else if (zoomCommand.kind === 'reset') {
       setZoom(initialZoomRef.current);
       setCurrentCenter(centerRef.current);
@@ -258,7 +272,7 @@ export default function DrillDownMapView({ countryIso2, countryName }: DrillDown
     if (!geo) return;
     const [lng, lat] = geoCentroid(geo as unknown as GeoJSON.Feature);
     setCurrentCenter([lng, lat]);
-    setZoom((z) => Math.min(z * 2.5, 80));
+    setZoom(Math.min(zoomRef.current * 2.5, 80));
   }, []);
 
   const handleLassoMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
@@ -367,7 +381,7 @@ export default function DrillDownMapView({ countryIso2, countryName }: DrillDown
       onMouseUp={handleLassoMouseUp}
       onClick={handleBackgroundClick}
     >
-      <div className="absolute inset-0 overflow-y-auto overflow-x-hidden">
+      <div className={`absolute inset-0 overflow-y-auto overflow-x-hidden ${className ?? ''}`}>
       <ComposableMap
         projection={useAlbers ? 'geoAlbersUsa' : 'geoMercator'}
         projectionConfig={useAlbers ? { scale: 900 } : undefined}
@@ -467,7 +481,7 @@ export default function DrillDownMapView({ countryIso2, countryName }: DrillDown
       {/* Zoom controls — single rounded panel with internal hairlines */}
       <div className="absolute right-4 top-4 z-10 flex flex-col overflow-hidden rounded-xl border border-hairline bg-panel/85 shadow-md backdrop-blur-md divide-y divide-hairline">
         <button
-          onClick={() => setZoom((z) => Math.min(z * 1.5, 80))}
+          onClick={() => setZoom(Math.min(zoomRef.current * 1.5, 80))}
           className={theme.zoomBtnClass}
           aria-label="Zoom in"
         >
@@ -476,7 +490,7 @@ export default function DrillDownMapView({ countryIso2, countryName }: DrillDown
           </svg>
         </button>
         <button
-          onClick={() => setZoom((z) => Math.max(z / 1.5, initialZoom))}
+          onClick={() => setZoom(Math.max(zoomRef.current / 1.5, initialZoom))}
           className={theme.zoomBtnClass}
           aria-label="Zoom out"
         >
