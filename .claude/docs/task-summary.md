@@ -1860,6 +1860,15 @@ Final follow-up polish pass on territory sub-projects 3 & 4.
   was added to silence a lint warning about `setTransition` inside
   the effect — the state machine pattern is the intended design.
 
+### Known limitations
+
+- The US cross-fade is fade-out-only on the outgoing view; the
+  incoming view mounts at `opacity-100` immediately rather than
+  animating in. Functionally smooth over 200ms, but visually a
+  hard cut-in for the new map. A true two-way cross-fade would
+  require the incoming view to mount at `opacity-0` and animate up
+  via a `useEffect`-driven class swap after first paint. Deferred.
+
 ### Out of scope (deferred)
 
 - **Rubber-band edges.** d3-zoom's `translateExtent` is
