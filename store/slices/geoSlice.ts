@@ -239,15 +239,25 @@ export const createGeoSlice: StateCreator<TerritoryStore, [], [], GeoSlice> = (s
   reparentGeoNode(id, newParentId) {
     let didApply = false;
     set((s) => {
-      if (!s.geoNodes[id]) return s;
+      const cur = s.geoNodes[id];
+      if (!cur) return s;
       if (newParentId !== null) {
         if (newParentId === id) return s;
         if (!s.geoNodes[newParentId]) return s;
         if (isAncestor(s.geoNodes, id, newParentId)) return s;
       }
+      if (cur.parentId === newParentId) return s;
       didApply = true;
+      const op: GeoOp = {
+        kind: 'reorder',
+        parentChanges: [{ id, beforeParentId: cur.parentId, afterParentId: newParentId }],
+        beforeOrder: s.geoNodeOrder,
+        afterOrder: s.geoNodeOrder,
+      };
       return {
-        geoNodes: { ...s.geoNodes, [id]: { ...s.geoNodes[id], parentId: newParentId } },
+        geoNodes: { ...s.geoNodes, [id]: { ...cur, parentId: newParentId } },
+        geoOpUndoStack: [...s.geoOpUndoStack, op].slice(-MAX_UNDO),
+        geoOpRedoStack: [],
       };
     });
     if (didApply) {
@@ -284,11 +294,21 @@ export const createGeoSlice: StateCreator<TerritoryStore, [], [], GeoSlice> = (s
 
       didApply = true;
       nextOrder = order;
+      const op: GeoOp = {
+        kind: 'reorder',
+        parentChanges: parentChanged
+          ? [{ id, beforeParentId: currentParent, afterParentId: newParentId }]
+          : [],
+        beforeOrder: s.geoNodeOrder,
+        afterOrder: order,
+      };
       return {
         geoNodes: parentChanged
           ? { ...s.geoNodes, [id]: { ...s.geoNodes[id], parentId: newParentId } }
           : s.geoNodes,
         geoNodeOrder: order,
+        geoOpUndoStack: [...s.geoOpUndoStack, op].slice(-MAX_UNDO),
+        geoOpRedoStack: [],
       };
     });
     if (!didApply || !nextOrder) return;
@@ -327,8 +347,18 @@ export const createGeoSlice: StateCreator<TerritoryStore, [], [], GeoSlice> = (s
 
       // Reparent each id whose parentId differs
       const geoNodes: Record<string, GeoNode> = { ...s.geoNodes };
+      const parentChangeOps: Array<{
+        id: string;
+        beforeParentId: string | null;
+        afterParentId: string | null;
+      }> = [];
       for (const id of ids) {
         if (geoNodes[id].parentId !== newParentId) {
+          parentChangeOps.push({
+            id,
+            beforeParentId: geoNodes[id].parentId,
+            afterParentId: newParentId,
+          });
           geoNodes[id] = { ...geoNodes[id], parentId: newParentId };
           parentChanges.push(id);
         }
@@ -343,7 +373,18 @@ export const createGeoSlice: StateCreator<TerritoryStore, [], [], GeoSlice> = (s
 
       didApply = true;
       nextOrder = order;
-      return { geoNodes, geoNodeOrder: order };
+      const op: GeoOp = {
+        kind: 'reorder',
+        parentChanges: parentChangeOps,
+        beforeOrder: s.geoNodeOrder,
+        afterOrder: order,
+      };
+      return {
+        geoNodes,
+        geoNodeOrder: order,
+        geoOpUndoStack: [...s.geoOpUndoStack, op].slice(-MAX_UNDO),
+        geoOpRedoStack: [],
+      };
     });
     if (!didApply || !nextOrder) return;
     for (const id of parentChanges) {
@@ -636,6 +677,22 @@ export const createGeoSlice: StateCreator<TerritoryStore, [], [], GeoSlice> = (s
         };
       }
 
+      if (top.kind === 'reorder') {
+        const nextNodes = { ...s.geoNodes };
+        for (const pc of top.parentChanges) {
+          if (nextNodes[pc.id]) {
+            nextNodes[pc.id] = { ...nextNodes[pc.id], parentId: pc.beforeParentId };
+          }
+        }
+        result.op = top;
+        return {
+          geoNodes: nextNodes,
+          geoNodeOrder: top.beforeOrder,
+          geoOpUndoStack: nextUndo,
+          geoOpRedoStack: [...s.geoOpRedoStack, top].slice(-MAX_UNDO),
+        };
+      }
+
       // Other kinds not yet handled (added in T2-T6). Drop the entry from
       // the undo stack to avoid wedging the system; do NOT push to redo.
       return { geoOpUndoStack: nextUndo };
@@ -664,6 +721,19 @@ export const createGeoSlice: StateCreator<TerritoryStore, [], [], GeoSlice> = (s
           `undo add(${op.node.id})`,
           directusWrite.deleteGeoNodes([op.node.id]),
         );
+      } else if (op.kind === 'reorder') {
+        for (const pc of op.parentChanges) {
+          fireWrite(
+            `undo reorder-parent(${pc.id})`,
+            directusWrite.updateGeoNodeRemote(pc.id, { parentId: pc.beforeParentId }),
+          );
+        }
+        if (op.beforeOrder !== op.afterOrder) {
+          fireWrite(
+            `undo reorder-sort`,
+            directusWrite.reorderGeoNodes(op.beforeOrder),
+          );
+        }
       }
     }
   },
@@ -747,6 +817,22 @@ export const createGeoSlice: StateCreator<TerritoryStore, [], [], GeoSlice> = (s
         };
       }
 
+      if (top.kind === 'reorder') {
+        const nextNodes = { ...s.geoNodes };
+        for (const pc of top.parentChanges) {
+          if (nextNodes[pc.id]) {
+            nextNodes[pc.id] = { ...nextNodes[pc.id], parentId: pc.afterParentId };
+          }
+        }
+        result.op = top;
+        return {
+          geoNodes: nextNodes,
+          geoNodeOrder: top.afterOrder,
+          geoOpRedoStack: nextRedo,
+          geoOpUndoStack: [...s.geoOpUndoStack, top].slice(-MAX_UNDO),
+        };
+      }
+
       return { geoOpRedoStack: nextRedo };
     });
     const op = result.op;
@@ -773,6 +859,19 @@ export const createGeoSlice: StateCreator<TerritoryStore, [], [], GeoSlice> = (s
           `redo add(${op.node.id})`,
           directusWrite.createGeoNode(op.node, op.sortIndex),
         );
+      } else if (op.kind === 'reorder') {
+        for (const pc of op.parentChanges) {
+          fireWrite(
+            `redo reorder-parent(${pc.id})`,
+            directusWrite.updateGeoNodeRemote(pc.id, { parentId: pc.afterParentId }),
+          );
+        }
+        if (op.beforeOrder !== op.afterOrder) {
+          fireWrite(
+            `redo reorder-sort`,
+            directusWrite.reorderGeoNodes(op.afterOrder),
+          );
+        }
       }
     }
   },
