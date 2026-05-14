@@ -170,7 +170,7 @@ function withStateRemoved(
   return next;
 }
 
-export const createGeoSlice: StateCreator<TerritoryStore, [], [], GeoSlice> = (set) => ({
+export const createGeoSlice: StateCreator<TerritoryStore, [], [], GeoSlice> = (set, get) => ({
   geoNodes: {},
   geoNodeOrder: [],
   activePaintGeoId: null,
@@ -407,33 +407,63 @@ export const createGeoSlice: StateCreator<TerritoryStore, [], [], GeoSlice> = (s
       if (mode === 'cascade') {
         const toDrop = descendantsOf(s.geoNodes, id);
         dropIds = Array.from(toDrop);
+        const removedNodes = dropIds.map((nid) => s.geoNodes[nid]);
+        const orderIndices: Record<string, number> = {};
+        s.geoNodeOrder.forEach((nid, idx) => {
+          if (toDrop.has(nid)) orderIndices[nid] = idx;
+        });
         const geoNodes = { ...s.geoNodes };
         toDrop.forEach((nid) => { delete geoNodes[nid]; });
+        const op: GeoOp = {
+          kind: 'remove',
+          mode: 'cascade',
+          removedNodes,
+          orderIndices,
+        };
         return {
           geoNodes,
           geoNodeOrder: s.geoNodeOrder.filter((nid) => !toDrop.has(nid)),
           activePaintGeoId: toDrop.has(s.activePaintGeoId ?? '') ? null : s.activePaintGeoId,
+          geoOpUndoStack: [...s.geoOpUndoStack, op].slice(-MAX_UNDO),
+          geoOpRedoStack: [],
         };
       }
+
+      // reparent-children
       const newParent = s.geoNodes[id].parentId;
+      const liftedChildren: Array<{ id: string; beforeParentId: string }> = [];
       const geoNodes: Record<string, GeoNode> = {};
       for (const [nid, n] of Object.entries(s.geoNodes)) {
         if (nid === id) continue;
         if (n.parentId === id) {
           geoNodes[nid] = { ...n, parentId: newParent };
           reparentPatches.push({ id: nid, parentId: newParent });
+          liftedChildren.push({ id: nid, beforeParentId: id });
         } else {
           geoNodes[nid] = n;
         }
       }
       dropIds = [id];
+      const removedNode = s.geoNodes[id];
+      const orderIndices: Record<string, number> = {};
+      s.geoNodeOrder.forEach((nid, idx) => {
+        if (nid === id) orderIndices[nid] = idx;
+      });
+      const op: GeoOp = {
+        kind: 'remove',
+        mode: 'reparent-children',
+        removedNodes: [removedNode],
+        orderIndices,
+        liftedChildren,
+      };
       return {
         geoNodes,
         geoNodeOrder: s.geoNodeOrder.filter((nid) => nid !== id),
         activePaintGeoId: s.activePaintGeoId === id ? null : s.activePaintGeoId,
+        geoOpUndoStack: [...s.geoOpUndoStack, op].slice(-MAX_UNDO),
+        geoOpRedoStack: [],
       };
     });
-    // Reparent-children must run before the delete so children aren't orphaned at SET NULL.
     for (const p of reparentPatches) {
       fireWrite(
         `reparentGeoNode(${p.id})`,
@@ -448,7 +478,6 @@ export const createGeoSlice: StateCreator<TerritoryStore, [], [], GeoSlice> = (s
     let dropIds: string[] = [];
     const reparentPatches: Array<{ id: string; parentId: string | null }> = [];
     set((s) => {
-      // Filter to ids that actually exist
       const valid = ids.filter((id) => s.geoNodes[id]);
       if (valid.length === 0) return s;
 
@@ -458,36 +487,64 @@ export const createGeoSlice: StateCreator<TerritoryStore, [], [], GeoSlice> = (s
           for (const did of descendantsOf(s.geoNodes, id)) drop.add(did);
         }
         dropIds = Array.from(drop);
+        const removedNodes = dropIds.map((nid) => s.geoNodes[nid]);
+        const orderIndices: Record<string, number> = {};
+        s.geoNodeOrder.forEach((nid, idx) => {
+          if (drop.has(nid)) orderIndices[nid] = idx;
+        });
         const geoNodes = { ...s.geoNodes };
         drop.forEach((nid) => { delete geoNodes[nid]; });
         const activeStillExists = s.activePaintGeoId !== null && !drop.has(s.activePaintGeoId);
+        const op: GeoOp = {
+          kind: 'remove',
+          mode: 'cascade',
+          removedNodes,
+          orderIndices,
+        };
         return {
           geoNodes,
           geoNodeOrder: s.geoNodeOrder.filter((nid) => !drop.has(nid)),
           activePaintGeoId: activeStillExists ? s.activePaintGeoId : null,
+          geoOpUndoStack: [...s.geoOpUndoStack, op].slice(-MAX_UNDO),
+          geoOpRedoStack: [],
         };
       }
 
-      // reparent-children: per-id, mirror single-node behavior
+      // reparent-children
       const removed = new Set(valid);
+      const liftedChildren: Array<{ id: string; beforeParentId: string }> = [];
       const geoNodes: Record<string, GeoNode> = {};
       for (const [nid, n] of Object.entries(s.geoNodes)) {
         if (removed.has(nid)) continue;
-        // If the node's parent is being removed, lift to that parent's parent
         if (n.parentId && removed.has(n.parentId)) {
           const newParent = s.geoNodes[n.parentId].parentId;
           geoNodes[nid] = { ...n, parentId: newParent };
           reparentPatches.push({ id: nid, parentId: newParent });
+          liftedChildren.push({ id: nid, beforeParentId: n.parentId });
         } else {
           geoNodes[nid] = n;
         }
       }
       dropIds = Array.from(removed);
+      const removedNodes = dropIds.map((nid) => s.geoNodes[nid]);
+      const orderIndices: Record<string, number> = {};
+      s.geoNodeOrder.forEach((nid, idx) => {
+        if (removed.has(nid)) orderIndices[nid] = idx;
+      });
       const activeStillExists = s.activePaintGeoId !== null && !removed.has(s.activePaintGeoId);
+      const op: GeoOp = {
+        kind: 'remove',
+        mode: 'reparent-children',
+        removedNodes,
+        orderIndices,
+        liftedChildren,
+      };
       return {
         geoNodes,
         geoNodeOrder: s.geoNodeOrder.filter((nid) => !removed.has(nid)),
         activePaintGeoId: activeStillExists ? s.activePaintGeoId : null,
+        geoOpUndoStack: [...s.geoOpUndoStack, op].slice(-MAX_UNDO),
+        geoOpRedoStack: [],
       };
     });
     for (const p of reparentPatches) {
@@ -693,6 +750,35 @@ export const createGeoSlice: StateCreator<TerritoryStore, [], [], GeoSlice> = (s
         };
       }
 
+      if (top.kind === 'remove') {
+        const nextNodes: Record<string, GeoNode> = { ...s.geoNodes };
+        for (const n of top.removedNodes) {
+          nextNodes[n.id] = n;
+        }
+        if (top.mode === 'reparent-children' && top.liftedChildren) {
+          for (const lc of top.liftedChildren) {
+            if (nextNodes[lc.id]) {
+              nextNodes[lc.id] = { ...nextNodes[lc.id], parentId: lc.beforeParentId };
+            }
+          }
+        }
+        const orderedRestores = Object.entries(top.orderIndices)
+          .map(([id, idx]) => ({ id, idx }))
+          .sort((a, b) => a.idx - b.idx);
+        const nextOrder = [...s.geoNodeOrder];
+        for (const { id, idx } of orderedRestores) {
+          const insertAt = Math.min(idx, nextOrder.length);
+          nextOrder.splice(insertAt, 0, id);
+        }
+        result.op = top;
+        return {
+          geoNodes: nextNodes,
+          geoNodeOrder: nextOrder,
+          geoOpUndoStack: nextUndo,
+          geoOpRedoStack: [...s.geoOpRedoStack, top].slice(-MAX_UNDO),
+        };
+      }
+
       // Other kinds not yet handled (added in T2-T6). Drop the entry from
       // the undo stack to avoid wedging the system; do NOT push to redo.
       return { geoOpUndoStack: nextUndo };
@@ -734,6 +820,26 @@ export const createGeoSlice: StateCreator<TerritoryStore, [], [], GeoSlice> = (s
             directusWrite.reorderGeoNodes(op.beforeOrder),
           );
         }
+      } else if (op.kind === 'remove') {
+        for (const n of op.removedNodes) {
+          const idx = op.orderIndices[n.id] ?? 0;
+          fireWrite(
+            `undo remove-create(${n.id})`,
+            directusWrite.createGeoNode(n, idx),
+          );
+        }
+        if (op.mode === 'reparent-children' && op.liftedChildren) {
+          for (const lc of op.liftedChildren) {
+            fireWrite(
+              `undo remove-lift-revert(${lc.id})`,
+              directusWrite.updateGeoNodeRemote(lc.id, { parentId: lc.beforeParentId }),
+            );
+          }
+        }
+        fireWrite(
+          `undo remove-sort`,
+          directusWrite.reorderGeoNodes(get().geoNodeOrder),
+        );
       }
     }
   },
@@ -833,6 +939,35 @@ export const createGeoSlice: StateCreator<TerritoryStore, [], [], GeoSlice> = (s
         };
       }
 
+      if (top.kind === 'remove') {
+        const removedIds = new Set(top.removedNodes.map((n) => n.id));
+        const nextNodes: Record<string, GeoNode> = {};
+        for (const [nid, n] of Object.entries(s.geoNodes)) {
+          if (removedIds.has(nid)) continue;
+          if (top.mode === 'reparent-children' && top.liftedChildren) {
+            const lift = top.liftedChildren.find((lc) => lc.id === nid);
+            if (lift) {
+              const parentNode = s.geoNodes[lift.beforeParentId];
+              const newParent = parentNode ? parentNode.parentId : null;
+              nextNodes[nid] = { ...n, parentId: newParent };
+              continue;
+            }
+          }
+          nextNodes[nid] = n;
+        }
+        result.op = top;
+        return {
+          geoNodes: nextNodes,
+          geoNodeOrder: s.geoNodeOrder.filter((nid) => !removedIds.has(nid)),
+          activePaintGeoId:
+            s.activePaintGeoId !== null && removedIds.has(s.activePaintGeoId)
+              ? null
+              : s.activePaintGeoId,
+          geoOpRedoStack: nextRedo,
+          geoOpUndoStack: [...s.geoOpUndoStack, top].slice(-MAX_UNDO),
+        };
+      }
+
       return { geoOpRedoStack: nextRedo };
     });
     const op = result.op;
@@ -872,6 +1007,23 @@ export const createGeoSlice: StateCreator<TerritoryStore, [], [], GeoSlice> = (s
             directusWrite.reorderGeoNodes(op.afterOrder),
           );
         }
+      } else if (op.kind === 'remove') {
+        const removedIds = op.removedNodes.map((n) => n.id);
+        if (op.mode === 'reparent-children' && op.liftedChildren) {
+          for (const lc of op.liftedChildren) {
+            const live = get().geoNodes[lc.id];
+            if (live) {
+              fireWrite(
+                `redo remove-lift(${lc.id})`,
+                directusWrite.updateGeoNodeRemote(lc.id, { parentId: live.parentId }),
+              );
+            }
+          }
+        }
+        fireWrite(
+          `redo remove-delete`,
+          directusWrite.deleteGeoNodes(removedIds),
+        );
       }
     }
   },
