@@ -7,6 +7,7 @@ import {
   getAccountStatsByEntity,
   getEntityMetricVal,
 } from '@/lib/territoryIndex';
+import { getStatesForCountry } from '@/lib/stateLoader';
 import type { FieldDefinition } from '@/lib/accountFields';
 import type { GeoNode } from '@/types/territory';
 
@@ -32,6 +33,24 @@ export const useFocusedEntityIso = () =>
 /** Whether a given entity code is currently highlighted by a coverage badge. */
 export const useEntityHighlight = (entityCode: string) =>
   useTerritoryStore((s) => s.highlightedEntityCodes.includes(entityCode));
+
+/**
+ * Best-effort name resolver for selection-chip popover rows.
+ *
+ * - State codes (`"US:US-CA"`): split on `:`, look up the state code in
+ *   `stateLoader`'s cache. Returns `name` if cached, else `null`.
+ * - Country codes (`"US"`): not resolved here. Capturing country
+ *   display names requires slice changes scheduled for Polish-B.
+ * - Stale / unknown codes: `null`.
+ */
+export const useRegionNameByIso = (iso: string): string | null => {
+  if (!iso.includes(':')) return null;
+  const [iso2, stateCode] = iso.split(':');
+  if (!iso2 || !stateCode) return null;
+  const feats = getStatesForCountry(iso2);
+  const match = feats.find((f) => f.id === stateCode);
+  return match ? match.name : null;
+};
 
 // ── Region rollup ─────────────────────────────────────────────────────────────
 //
