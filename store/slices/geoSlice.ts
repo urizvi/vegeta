@@ -212,9 +212,28 @@ export const createGeoSlice: StateCreator<TerritoryStore, [], [], GeoSlice> = (s
   updateGeoNode(id, patch) {
     let didApply = false;
     set((s) => {
-      if (!s.geoNodes[id]) return s;
+      const cur = s.geoNodes[id];
+      if (!cur) return s;
       didApply = true;
-      return { geoNodes: { ...s.geoNodes, [id]: { ...s.geoNodes[id], ...patch } } };
+      const next = { ...s.geoNodes, [id]: { ...cur, ...patch } };
+
+      // Push one op per logical edit (rename and color are tracked separately).
+      const ops: GeoOp[] = [];
+      if (patch.name !== undefined && patch.name !== cur.name) {
+        ops.push({ kind: 'rename', id, before: cur.name, after: patch.name });
+      }
+      if (patch.color !== undefined && (patch.color ?? null) !== (cur.color ?? null)) {
+        ops.push({ kind: 'color', id, before: cur.color ?? null, after: patch.color ?? null });
+      }
+      const nextUndo = ops.length > 0
+        ? [...s.geoOpUndoStack, ...ops].slice(-MAX_UNDO)
+        : s.geoOpUndoStack;
+
+      return {
+        geoNodes: next,
+        geoOpUndoStack: nextUndo,
+        geoOpRedoStack: ops.length > 0 ? [] : s.geoOpRedoStack,
+      };
     });
     if (didApply) fireWrite(`updateGeoNode(${id})`, directusWrite.updateGeoNodeRemote(id, patch));
   },
@@ -568,16 +587,39 @@ export const createGeoSlice: StateCreator<TerritoryStore, [], [], GeoSlice> = (s
         };
       }
 
+      if (top.kind === 'rename') {
+        if (!s.geoNodes[top.id]) {
+          return { geoOpUndoStack: nextUndo };
+        }
+        const nextNodes = {
+          ...s.geoNodes,
+          [top.id]: { ...s.geoNodes[top.id], name: top.before },
+        };
+        result.op = top;
+        return {
+          geoNodes: nextNodes,
+          geoOpUndoStack: nextUndo,
+          geoOpRedoStack: [...s.geoOpRedoStack, top].slice(-MAX_UNDO),
+        };
+      }
+
       // Other kinds not yet handled (added in T2-T6). Drop the entry from
       // the undo stack to avoid wedging the system; do NOT push to redo.
       return { geoOpUndoStack: nextUndo };
     });
     const op = result.op;
-    if (op && op.kind === 'paint') {
-      for (const c of op.patches) {
+    if (op) {
+      if (op.kind === 'paint') {
+        for (const c of op.patches) {
+          fireWrite(
+            `undo updateGeoNode(${c.id})`,
+            directusWrite.updateGeoNodeRemote(c.id, c.before),
+          );
+        }
+      } else if (op.kind === 'rename') {
         fireWrite(
-          `undo updateGeoNode(${c.id})`,
-          directusWrite.updateGeoNodeRemote(c.id, c.before),
+          `undo rename(${op.id})`,
+          directusWrite.updateGeoNodeRemote(op.id, { name: op.before }),
         );
       }
     }
@@ -613,14 +655,37 @@ export const createGeoSlice: StateCreator<TerritoryStore, [], [], GeoSlice> = (s
         };
       }
 
+      if (top.kind === 'rename') {
+        if (!s.geoNodes[top.id]) {
+          return { geoOpRedoStack: nextRedo };
+        }
+        const nextNodes = {
+          ...s.geoNodes,
+          [top.id]: { ...s.geoNodes[top.id], name: top.after },
+        };
+        result.op = top;
+        return {
+          geoNodes: nextNodes,
+          geoOpRedoStack: nextRedo,
+          geoOpUndoStack: [...s.geoOpUndoStack, top].slice(-MAX_UNDO),
+        };
+      }
+
       return { geoOpRedoStack: nextRedo };
     });
     const op = result.op;
-    if (op && op.kind === 'paint') {
-      for (const c of op.patches) {
+    if (op) {
+      if (op.kind === 'paint') {
+        for (const c of op.patches) {
+          fireWrite(
+            `redo updateGeoNode(${c.id})`,
+            directusWrite.updateGeoNodeRemote(c.id, c.after),
+          );
+        }
+      } else if (op.kind === 'rename') {
         fireWrite(
-          `redo updateGeoNode(${c.id})`,
-          directusWrite.updateGeoNodeRemote(c.id, c.after),
+          `redo rename(${op.id})`,
+          directusWrite.updateGeoNodeRemote(op.id, { name: op.after }),
         );
       }
     }
