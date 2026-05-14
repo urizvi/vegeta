@@ -25,6 +25,8 @@ export function MapHelpPopover({ open, onClose }: { open: boolean; onClose: () =
     ['Drag (in Select mode)', 'Lasso multi-select'],
     ['Esc', 'Close popover · clear selection · clear paint/eraser'],
     ['?', 'Toggle this popover'],
+    ['/', 'Focus search'],
+    ['g', 'Focus Geos sidebar'],
   ];
 
   return (
