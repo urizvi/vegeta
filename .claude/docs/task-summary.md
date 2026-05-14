@@ -1457,3 +1457,88 @@ The spec also proposed extending the Toolbar's Esc cascade to cover chip popover
 ### Verification
 
 `npm run lint` clean, `npm run build` clean (Next.js 16 / Turbopack, 14 static pages). Manual UI smoke is the user's responsibility: pin/unpin/swap via region click, each chip popover opens and closes correctly, gap/conflict highlight buttons still work from within the popovers, no obstruction at narrow viewport widths.
+
+---
+
+## Shipped 2026-05-13 — Polish-A (selection chip + `/` and `g` shortcuts)
+
+Spec: `docs/superpowers/specs/2026-05-13-territory-polish-a-design.md`
+Plan: `docs/superpowers/plans/2026-05-13-territory-polish-a.md`
+
+First of four follow-up polish passes on the territory map sub-projects
+3 and 4. Polish-B (SP4 multi-select), Polish-C (undo/redo across
+sidebar mutations + animated tree open/close), and Polish-D (SP3
+motion: animated drill transition + pan momentum) are queued for later
+passes.
+
+### What shipped
+
+- `components/territory/map/SelectionChip.tsx` — new chip + popover
+  body (`SelectionChipPopover`) + internal `SelectionRow`. Chip is
+  `forwardRef<HTMLButtonElement>` and self-returns `null` when
+  `useSelectionCount() === 0`. Popover lists selected codes with
+  best-effort state names; per-row ✕ calls `toggleSelection(code)`;
+  header `Clear` calls `clearSelection()`.
+- `store/slices/mapUiSelectors.ts` — adds `getRegionNameByIso(iso)`, a
+  plain module-scoped utility (not a hook) that splits state codes
+  (`"US:US-CA"`) on `:` and looks them up in `stateLoader`'s existing
+  cache. Returns `null` for country codes (deferred to Polish-B where
+  the selection slice grows a name parameter for sidebar bulk-select)
+  and for stale lookups.
+- `components/territory/map/MapChipsDock.tsx` — `OpenChip` extended
+  with `'selection'`; subscribes to `useSelectionCount()`; mounts a
+  gated `ChipWithPopover` block as the last child so the empty
+  `ChipWithPopover` wrapper doesn't leak the `gap-2` flex spacing
+  when count is 0.
+- `components/territory/toolbar/Toolbar.tsx` — keydown handler gains
+  `/` (focuses `#geo-sidebar-search`) and `g` (focuses first
+  `[data-geo-node-row]`) cases between the `?` and arrow blocks. Both
+  pass through the existing `isEditableTarget` guard so typing those
+  keys inside any input doesn't trigger them.
+- `components/territory/sidebar/SidebarSearchInput.tsx` — optional
+  `id?: string` prop forwarded to the `<input>`.
+- `components/territory/sidebar/GeoSidebarPanel.tsx` — passes
+  `id="geo-sidebar-search"`.
+- `components/territory/sidebar/GeoNodeRow.tsx` — row root `<div>`
+  gains `data-geo-node-row=""`, `tabIndex={-1}` (out of tab order but
+  imperatively focusable), and a
+  `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40`
+  treatment.
+- `components/territory/map/MapHelpPopover.tsx` — appends
+  `['/', 'Focus search']` and `['g', 'Focus Geos sidebar']` rows.
+
+### Deviations from spec
+
+The spec's initial draft proposed `useRegionNameByIso` (use-prefixed)
+as a generic country+state resolver. Code-quality review during
+implementation flagged that the `use*` prefix is reserved in this file
+for store-subscribed hooks (e.g. `useEntityHighlight`,
+`useRegionRollup`) — the new function is a plain module-scoped
+utility, so it was renamed to `getRegionNameByIso` to match the
+`get*` convention used elsewhere (`getStatesForCountry`,
+`getAccountStatsByEntity`). Country-name resolution was also scoped
+out and deferred to Polish-B, where the selection slice will need to
+accept names alongside codes for sidebar bulk-select anyway. The
+popover renders country codes as-is (e.g. `"US"`) and only resolves
+state codes via the stateLoader cache.
+
+### Verification
+
+`npx tsc --noEmit`, `npm run lint`, `npm run build` all clean (Next.js
+16 / Turbopack, 14 static pages). Manual UI smoke is the user's
+responsibility:
+
+1. Map view, no selection → no SelectionChip visible.
+2. Select 2+ regions (click + shift-click in Select mode, or lasso) →
+   chip appears with count.
+3. Click chip → popover lists codes; drilled-down state codes show
+   names before the code; country codes show codes only.
+4. Per-row ✕ removes that code; count decrements; popover stays open
+   until the last code is removed (then chip and popover unmount
+   together).
+5. `Clear` button empties the set and closes the popover.
+6. Press `/` from map view → focus lands in Geos sidebar search box.
+7. Press `g` from map view → focus lands on the first Geo node row
+   with the visible focus ring.
+8. Typing `/` or `g` while focused in any input → no map action.
+9. `?` opens MapHelpPopover; rows for `/` and `g` are listed.
