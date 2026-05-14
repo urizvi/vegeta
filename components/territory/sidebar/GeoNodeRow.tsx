@@ -100,7 +100,9 @@ export default function GeoNodeRow({
 
         <div
           onClick={() => setActivePaintGeo(isActive ? null : nodeId)}
-          className={`group flex items-center gap-1.5 rounded-md py-1 pr-1 text-sm transition-colors ${
+          data-geo-node-row=""
+          tabIndex={-1}
+          className={`group flex items-center gap-1.5 rounded-md py-1 pr-1 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 ${
             isActive
               ? 'bg-indigo-100 text-indigo-900 dark:bg-indigo-950/60 dark:text-indigo-100'
               : 'hover:bg-slate-200/60 dark:hover:bg-slate-800/60'
