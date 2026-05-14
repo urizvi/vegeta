@@ -46,6 +46,11 @@ export default function GeoSidebarPanel() {
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const [bulkDragIds, setBulkDragIds] = useState<string[] | null>(null);
 
+  const bulkDragSet = useMemo(
+    () => (bulkDragIds ? new Set(bulkDragIds) : null),
+    [bulkDragIds],
+  );
+
   const filter = useMemo(() => filterGeoTree(nodes, query), [nodes, query]);
 
   const descendantIds = useMemo(
@@ -177,8 +182,8 @@ export default function GeoSidebarPanel() {
                     descendantIds={descendantIds}
                     visibleOrder={sortableIds}
                     bulkDragActive={
-                      bulkDragIds !== null
-                      && bulkDragIds.includes(node.id)
+                      bulkDragSet !== null
+                      && bulkDragSet.has(node.id)
                       && node.id !== activeDragId
                     }
                   />
