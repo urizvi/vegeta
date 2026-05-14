@@ -19,6 +19,7 @@ import { filterGeoTree } from '@/lib/geoTreeFilter';
 import GeoNodeRow from './GeoNodeRow';
 import GeoSelectionDragOverlay from './GeoSelectionDragOverlay';
 import SidebarSearchInput from './SidebarSearchInput';
+import { isEditableTarget } from '@/lib/isEditableTarget';
 
 function descendantsOfLocal(nodes: ReturnType<typeof useGeoNodes>, id: string): Set<string> {
   const out = new Set<string>();
@@ -39,7 +40,7 @@ export default function GeoSidebarPanel() {
   const roots = useGeoChildren(null);
   const nodes = useGeoNodes();
   const order = useGeoNodeOrder();
-  const { addGeoNode, setActivePaintGeo, reorderGeoNode, reorderGeoNodes, clearGeoSelection } = useActions();
+  const { addGeoNode, setActivePaintGeo, reorderGeoNode, reorderGeoNodes, removeGeoNodes, clearGeoSelection } = useActions();
   const selectedGeoNodeIds = useSelectedGeoNodeIds();
 
   const [query, setQuery] = useState('');
@@ -127,12 +128,36 @@ export default function GeoSidebarPanel() {
     reorderGeoNode(activeId, newParentId, computeBeforeId(newParentId));
   }
 
+  function handleSidebarKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (isEditableTarget(e.target)) return;
+    if (selectedGeoNodeIds.length === 0) return;
+    if (e.key === 'Escape') {
+      e.stopPropagation();
+      clearGeoSelection();
+      return;
+    }
+    if (e.key === 'Backspace' || e.key === 'Delete') {
+      e.preventDefault();
+      const n = selectedGeoNodeIds.length;
+      const msg = `Delete ${n} geo${n > 1 ? 's' : ''} and their descendants? Country/state assignments inside will be cleared.`;
+      if (window.confirm(msg)) {
+        removeGeoNodes(selectedGeoNodeIds, 'cascade');
+        clearGeoSelection();
+      }
+    }
+  }
+
   const sortableIds = filter
     ? order.filter((id) => filter.visibleIds.has(id))
     : order;
 
   return (
-    <>
+    <div
+      data-geo-sidebar-root=""
+      tabIndex={-1}
+      onKeyDown={handleSidebarKeyDown}
+      className="flex h-full flex-col"
+    >
       <div className="flex flex-col gap-2 border-b border-hairline px-3 py-2">
         <button
           onClick={() => {
@@ -207,6 +232,6 @@ export default function GeoSidebarPanel() {
           )}
         </p>
       </div>
-    </>
+    </div>
   );
 }
