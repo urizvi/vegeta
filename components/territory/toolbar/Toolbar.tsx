@@ -88,6 +88,20 @@ export default function Toolbar({ drillDownCountryName }: ToolbarProps) {
         return;
       }
 
+      // / focuses the Geos sidebar search input
+      if (e.key === '/') {
+        e.preventDefault();
+        document.getElementById('geo-sidebar-search')?.focus();
+        return;
+      }
+
+      // g focuses the first row in the Geos sidebar tree
+      if (e.key === 'g' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        document.querySelector<HTMLElement>('[data-geo-node-row]')?.focus();
+        return;
+      }
+
       // Arrow / +/- / 0 — dispatch zoom commands (no modifier)
       if (!e.metaKey && !e.ctrlKey && !e.altKey) {
         let cmd: ZoomCommand | null = null;
