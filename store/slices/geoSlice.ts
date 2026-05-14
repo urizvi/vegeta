@@ -58,6 +58,11 @@ export interface GeoSlice {
     newParentId: string | null,
     beforeId: string | null,
   ): void;
+  reorderGeoNodes(
+    ids: string[],
+    newParentId: string | null,
+    beforeId: string | null,
+  ): void;
   /**
    * `cascade` removes the node and all descendants.
    * `reparent-children` removes the node but moves its direct children up to its parent.
@@ -254,6 +259,60 @@ export const createGeoSlice: StateCreator<TerritoryStore, [], [], GeoSlice> = (s
     }
     fireWrite(
       `reorderGeoNode-sort(${id})`,
+      directusWrite.reorderGeoNodes(nextOrder),
+    );
+  },
+
+  reorderGeoNodes(ids, newParentId, beforeId) {
+    if (ids.length === 0) return;
+    let didApply = false;
+    let nextOrder: string[] | null = null;
+    const parentChanges: string[] = [];
+    set((s) => {
+      // Validate: all ids exist
+      if (ids.some((id) => !s.geoNodes[id])) return s;
+      // Validate: newParentId exists if not null and is not in batch
+      if (newParentId !== null) {
+        if (!s.geoNodes[newParentId]) return s;
+        if (ids.includes(newParentId)) return s;
+        // Cycle: any selected id ancestor of newParentId?
+        if (ids.some((id) => isAncestor(s.geoNodes, id, newParentId))) return s;
+      }
+      // beforeId can't be in batch
+      if (beforeId !== null) {
+        if (!s.geoNodes[beforeId]) return s;
+        if (ids.includes(beforeId)) return s;
+      }
+
+      // Reparent each id whose parentId differs
+      const geoNodes: Record<string, GeoNode> = { ...s.geoNodes };
+      for (const id of ids) {
+        if (geoNodes[id].parentId !== newParentId) {
+          geoNodes[id] = { ...geoNodes[id], parentId: newParentId };
+          parentChanges.push(id);
+        }
+      }
+
+      // Splice the batch out of geoNodeOrder and insert as a contiguous run
+      const batchSet = new Set(ids);
+      const without = s.geoNodeOrder.filter((nid) => !batchSet.has(nid));
+      const insertAt = beforeId === null ? without.length : without.indexOf(beforeId);
+      const order = [...without];
+      order.splice(insertAt < 0 ? order.length : insertAt, 0, ...ids);
+
+      didApply = true;
+      nextOrder = order;
+      return { geoNodes, geoNodeOrder: order };
+    });
+    if (!didApply || !nextOrder) return;
+    for (const id of parentChanges) {
+      fireWrite(
+        `reorderGeoNodes-parent(${id})`,
+        directusWrite.updateGeoNodeRemote(id, { parentId: newParentId }),
+      );
+    }
+    fireWrite(
+      `reorderGeoNodes-sort(batch=${ids.length})`,
       directusWrite.reorderGeoNodes(nextOrder),
     );
   },
