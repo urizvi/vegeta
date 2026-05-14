@@ -1611,21 +1611,23 @@ motion) remain.
 
 ### Deviations from spec
 
-- Recursive descent inside `GeoNodeRow` passes
-  `bulkDragActive={false}` to descendant rows. Only root-level rows
-  in `GeoSidebarPanel`'s render compute the real per-row value.
-  Descendant rows do not visually dim during bulk drag. Acceptable
-  trade-off; multi-select is typically sibling-grouped. If we ever
-  need descendant dim, replace the recursive `false` with a
-  hook-based selector — small addition.
 - The `reparent-children` mode of `removeGeoNodes` is implemented
   for parity with single-node behavior but Polish-B's UI only
   exercises `cascade`. The reparent path mirrors the single-node
   per-id logic (lift children to grandparent).
-- A code-quality review pass during T9 surfaced an O(roots × batch)
-  per-row check on the inline `.includes()`; resolved by memoizing a
-  `Set` of `bulkDragIds` and switching to `.has()` (commit
-  `a50449e`).
+
+### Review-pass fixes applied
+
+- T9 code-quality review surfaced an O(roots × batch) per-row check
+  on the inline `.includes()`; resolved by memoizing a `Set` of
+  `bulkDragIds` and switching to `.has()` (commit `a50449e`).
+- Final review surfaced that the original plan's recursive
+  `bulkDragActive={false}` left nested selected rows un-dimmed
+  during bulk drag. Fixed by passing `bulkDragSet` + `activeDragId`
+  down through `GeoNodeRow` so each row computes its own
+  membership; same pass pruned unused
+  `setGeoSelection` / `useGeoSelectionCount` /
+  `useGeoSelectionAnchor` exports (commit `881e720`).
 
 ### Verification
 
