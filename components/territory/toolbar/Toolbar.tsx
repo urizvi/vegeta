@@ -66,7 +66,9 @@ export default function Toolbar({ drillDownCountryName }: ToolbarProps) {
       if (isEditableTarget(e.target)) return;
 
       // Esc cascade: popover → selection → paint/eraser
+      // The sidebar's local handler runs first when focus is inside the sidebar.
       if (e.key === 'Escape') {
+        if (document.activeElement?.closest('[data-geo-sidebar-root]')) return;
         if (helpOpen) { setHelpOpen(false); return; }
         if (selectionCount > 0) { clearSelection(); return; }
         if (paintGeo || eraserActive) {
