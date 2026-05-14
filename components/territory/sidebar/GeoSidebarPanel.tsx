@@ -206,11 +206,8 @@ export default function GeoSidebarPanel() {
                     dragDisabled={dragDisabled}
                     descendantIds={descendantIds}
                     visibleOrder={sortableIds}
-                    bulkDragActive={
-                      bulkDragSet !== null
-                      && bulkDragSet.has(node.id)
-                      && node.id !== activeDragId
-                    }
+                    bulkDragSet={bulkDragSet}
+                    activeDragId={activeDragId}
                   />
                 ))}
             </SortableContext>

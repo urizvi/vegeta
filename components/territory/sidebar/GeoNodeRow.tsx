@@ -18,17 +18,19 @@ interface GeoNodeRowProps {
   dragDisabled: boolean;
   descendantIds: Set<string>;
   visibleOrder?: string[];
-  bulkDragActive?: boolean;
+  bulkDragSet?: Set<string> | null;
+  activeDragId?: string | null;
 }
 
 export default function GeoNodeRow({
   nodeId, depth, visibleIds, forceExpandIds, dragDisabled, descendantIds,
-  visibleOrder = [], bulkDragActive = false,
+  visibleOrder = [], bulkDragSet = null, activeDragId = null,
 }: GeoNodeRowProps) {
   const node = useGeoNode(nodeId);
   const children = useGeoChildren(nodeId);
   const activeId = useActivePaintGeoId();
   const isSelected = useIsGeoSelected(nodeId);
+  const bulkDragActive = bulkDragSet !== null && bulkDragSet.has(nodeId) && nodeId !== activeDragId;
   const {
     addGeoNode, updateGeoNode, removeGeoNode, setActivePaintGeo,
     toggleGeoSelection, extendGeoSelection, clearGeoSelection,
@@ -262,7 +264,8 @@ export default function GeoNodeRow({
           dragDisabled={dragDisabled}
           descendantIds={descendantIds}
           visibleOrder={visibleOrder}
-          bulkDragActive={false}
+          bulkDragSet={bulkDragSet}
+          activeDragId={activeDragId}
         />
       ))}
     </div>

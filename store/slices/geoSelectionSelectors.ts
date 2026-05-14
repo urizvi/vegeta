@@ -6,9 +6,3 @@ export const useSelectedGeoNodeIds = () =>
 
 export const useIsGeoSelected = (id: string) =>
   useTerritoryStore((s) => s.selectedGeoNodeIds.includes(id));
-
-export const useGeoSelectionCount = () =>
-  useTerritoryStore((s) => s.selectedGeoNodeIds.length);
-
-export const useGeoSelectionAnchor = () =>
-  useTerritoryStore((s) => s.selectionAnchorId);

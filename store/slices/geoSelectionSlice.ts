@@ -6,7 +6,6 @@ export interface GeoSelectionSlice {
   selectedGeoNodeIds: string[];
   selectionAnchorId: string | null;
 
-  setGeoSelection: (ids: string[], anchor?: string | null) => void;
   toggleGeoSelection: (id: string) => void;
   extendGeoSelection: (toId: string, visibleOrder: string[]) => void;
   clearGeoSelection: () => void;
@@ -15,13 +14,6 @@ export interface GeoSelectionSlice {
 export const createGeoSelectionSlice: StateCreator<TerritoryStore, [], [], GeoSelectionSlice> = (set) => ({
   selectedGeoNodeIds: [],
   selectionAnchorId: null,
-
-  setGeoSelection: (ids, anchor) =>
-    set(() => {
-      const uniq = Array.from(new Set(ids));
-      const nextAnchor = anchor === undefined ? (uniq.length > 0 ? uniq[uniq.length - 1] : null) : anchor;
-      return { selectedGeoNodeIds: uniq, selectionAnchorId: nextAnchor };
-    }),
 
   toggleGeoSelection: (id) =>
     set((s) => {
