@@ -1657,3 +1657,128 @@ Manual UI smoke is the user's responsibility:
     dismiss, paint clear, etc.).
 12. Polish-A `g` shortcut still focuses first row → subsequent
     Esc/Backspace operate against the sidebar.
+
+---
+
+## Shipped 2026-05-14 — Polish-C (universal undo/redo + tree animation)
+
+Spec: `docs/superpowers/specs/2026-05-13-territory-polish-c-design.md`
+Plan: `docs/superpowers/plans/2026-05-13-territory-polish-c.md`
+
+Third of four follow-up polish passes. Polish-D (SP3 motion) remains.
+
+### What shipped
+
+- `store/slices/geoSlice.ts` — replaces the paint-only undo plumbing
+  with a discriminated-union `GeoOp` covering six variants:
+  - `paint` (existing four paint/eraser actions; payload unchanged
+    via `NodeCodesPatch[]`)
+  - `rename` — captures `{id, before, after}` from `updateGeoNode`
+  - `color` — captures `{id, before, after}` from `updateGeoNode`
+    (sibling push to rename; combined `{name, color}` patches push
+    two ops)
+  - `add` — captures `{node, sortIndex}` from `addGeoNode`
+  - `remove` — captures `{mode, removedNodes, orderIndices,
+    liftedChildren?}` from `removeGeoNode`/`removeGeoNodes`
+  - `reorder` — captures `{parentChanges, beforeOrder, afterOrder}`
+    from `reorderGeoNode`/`reorderGeoNodes`/`reparentGeoNode`;
+    `parentChanges` carries both `beforeParentId` and
+    `afterParentId` so redo can re-apply forward without re-walking
+    siblings.
+  Stack fields renamed `geoUndoStack`/`geoRedoStack` →
+  `geoOpUndoStack`/`geoOpRedoStack`; actions renamed
+  `undoGeoAssignment`/`redoGeoAssignment` → `undoGeoOp`/`redoGeoOp`.
+  Slice creator now destructures `(set, get)` so the post-`set`
+  Directus replay for `remove` undo can read live `geoNodeOrder`.
+  Inside undo/redo, the wrapper-object idiom (`const result: { op:
+  GeoOp | null } = { op: null }`) avoids TypeScript narrowing
+  fallout from closure-captured assignments.
+- `store/slices/geoSelectors.ts` — `useCanUndoGeo`/`useCanRedoGeo`
+  switch to the renamed stack fields. Selector names unchanged
+  (already generic).
+- `components/territory/toolbar/Toolbar.tsx` —
+  `undoGeoAssignment`/`redoGeoAssignment` references renamed.
+  Button titles tighten from "Undo Geo assignment" to
+  "Undo (⌘Z)" / "Redo (⇧⌘Z)".
+- `components/territory/sidebar/GeoNodeRow.tsx` — wraps the
+  recursive children in a grid container that switches between
+  `grid-rows-[0fr]` and `grid-rows-[1fr]` based on `showExpanded`,
+  with `motion-safe:transition-[grid-template-rows] duration-200
+  ease-out`. Children render unconditionally (clipped by an inner
+  `overflow-hidden`). `aria-hidden={!showExpanded}` for SR users.
+  `prefers-reduced-motion: reduce` users get the instant toggle.
+
+### Op semantics summary
+
+| Kind | Push site | Undo (data) | Redo (data) | Directus replay |
+|---|---|---|---|---|
+| paint | 4 assign/clear actions | restore before-codes | restore after-codes | updateGeoNodeRemote per patch |
+| rename | `updateGeoNode({name})` | name = before | name = after | updateGeoNodeRemote |
+| color | `updateGeoNode({color})` | color = before | color = after | updateGeoNodeRemote |
+| add | `addGeoNode` | delete from nodes + order | re-insert at sortIndex | deleteGeoNodes / createGeoNode |
+| remove | `removeGeoNode`/`removeGeoNodes` | restore nodes + orderIndices; revert liftedChildren | re-delete (and re-lift) | createGeoNode + lift + reorderGeoNodes / deleteGeoNodes |
+| reorder | `reorderGeoNode`/`reorderGeoNodes`/`reparentGeoNode` | restore beforeOrder + beforeParentIds | restore afterOrder + afterParentIds | updateGeoNodeRemote per parent change + reorderGeoNodes |
+
+UI state (`activePaintGeoId`, `selectedGeoNodeIds`,
+`selectionAnchorId`, `activeEraser`, `selectActive`,
+`pinnedEntityIso`) is NOT touched by undo/redo. The
+`activePaintGeoId` nulling that happens forward when its target is
+deleted stays nulled even after the deletion is undone.
+
+### Implementation idioms worth knowing
+
+- **Wrapper-object capture for TypeScript narrowing**: TS narrows a
+  `let appliedOp: GeoOp | null = null` to `null` after a closure
+  assignment. Workaround: `const result: { op: GeoOp | null } = {
+  op: null };` then `result.op = top;`. Reads outside the `set`
+  callback widen to `GeoOp | null` and re-narrow on `if (op &&
+  op.kind === ...)`.
+- **Slice-creator `(set, get)` destructure**: introduced in T6 so
+  the `remove` undo's Directus replay can call
+  `directusWrite.reorderGeoNodes(get().geoNodeOrder)` against the
+  live order after `set` runs. Other branches don't need `get`.
+- **Tree animation via `grid-template-rows: 0fr ↔ 1fr`**: pure CSS,
+  no JS height measurement, no new dependency. Children stay
+  mounted while collapsed (clipped by inner `overflow-hidden`) —
+  acceptable trade-off; dnd-kit hit testing is unaffected because
+  the clipped container has zero height.
+
+### Known limitations (per spec)
+
+- `createGeoNode` during a remove-undo trusts that Directus accepts
+  client-supplied UUIDs. Directus has done so since Phase 1; if
+  rejected, local state remains correct and a refresh recovers.
+- Stack is session-only (not persisted). A page reload clears
+  history. Matches the prior paint-only behavior.
+- MAX_UNDO remains 50.
+- `geoSlice.ts` is now ~1036 lines. Within manageable bounds for
+  now. If a future polish pass adds another variant, consider
+  extracting `undoGeoOp`/`redoGeoOp` into a sibling
+  `geoUndoRedo.ts` (review-suggested follow-up, deferred).
+
+### Verification
+
+`npx tsc --noEmit`, `npm run lint`, `npm run build` all clean.
+Manual UI smoke checklist:
+
+1. Rename a node via inline editor → ⌘Z restores old name;
+   ⇧⌘Z reapplies.
+2. Change a node's color via swatch → ⌘Z restores old color.
+3. Click "New geo" → ⌘Z removes the just-created node.
+4. Click ✕ on a node with no children → ⌘Z restores it at its
+   position.
+5. Click ✕ on a node WITH children (cascade) → ⌘Z restores parent +
+   descendants at original positions.
+6. Bulk delete via Backspace (Polish-B) → ⌘Z restores all deleted
+   nodes at original positions.
+7. Drag-reorder a node → ⌘Z restores prior order + parent.
+8. Bulk-drag (Polish-B) → ⌘Z restores prior order + parents for
+   all moved nodes.
+9. Paint a country → ⌘Z still works exactly as before.
+10. Mixed sequence (rename + paint + reorder + delete) → four ⌘Z
+    unwinds in reverse.
+11. Toolbar undo/redo buttons reflect canUndo/canRedo across all
+    op types.
+12. Expand/collapse a row with children → smooth 200ms height
+    animation. `prefers-reduced-motion: reduce` users see instant
+    toggle.
