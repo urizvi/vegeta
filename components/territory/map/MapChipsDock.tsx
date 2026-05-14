@@ -11,19 +11,22 @@ import {
 import MapLegend from './MapLegend';
 import ChoroplethScale from './ChoroplethScale';
 import MapChip from './MapChip';
+import SelectionChip, { SelectionChipPopover } from './SelectionChip';
+import { useSelectionCount } from '@/store/slices/selectionSelectors';
 
 interface Props {
   view: 'world' | 'drilldown';
   drilldownIso2?: string;
 }
 
-type OpenChip = 'legend' | 'scale' | 'gaps' | 'conflicts' | null;
+type OpenChip = 'legend' | 'scale' | 'gaps' | 'conflicts' | 'selection' | null;
 
 export default function MapChipsDock({ view, drilldownIso2 }: Props) {
   const theme = useMapTheme();
   const { active, scale, fieldDef } = useChoroplethScale(view, drilldownIso2);
   const gaps = useCoverageGaps(view, drilldownIso2);
   const conflicts = useAssignmentConflicts(view, drilldownIso2);
+  const selectionCount = useSelectionCount();
   const { setHighlightedEntityCodes, clearHighlight } = useActions();
   const highlighted = useHighlightedEntityCodes();
   const [openChip, setOpenChip] = useState<OpenChip>(null);
@@ -147,6 +150,19 @@ export default function MapChipsDock({ view, drilldownIso2 }: Props) {
                 <span className="font-mono tabular-nums">{conflicts.count}</span>
               </>
             }
+          />
+        </ChipWithPopover>
+      )}
+
+      {selectionCount > 0 && (
+        <ChipWithPopover
+          open={openChip === 'selection'}
+          popover={<SelectionChipPopover />}
+          theme={theme}
+        >
+          <SelectionChip
+            open={openChip === 'selection'}
+            onToggle={() => toggle('selection')}
           />
         </ChipWithPopover>
       )}
