@@ -12,6 +12,7 @@ import type { ContactsSlice } from './slices/contactsSlice';
 import type { ActivitiesSlice } from './slices/activitiesSlice';
 import type { TasksSlice } from './slices/tasksSlice';
 import type { SelectionSlice } from './slices/selectionSlice';
+import type { GeoSelectionSlice } from './slices/geoSelectionSlice';
 
 export interface RootActions {
   exportState: () => string;
@@ -33,4 +34,5 @@ export type TerritoryStore =
   & ActivitiesSlice
   & TasksSlice
   & SelectionSlice
+  & GeoSelectionSlice
   & RootActions;
