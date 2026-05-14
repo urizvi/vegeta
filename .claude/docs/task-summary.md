@@ -1782,3 +1782,137 @@ Manual UI smoke checklist:
 12. Expand/collapse a row with children → smooth 200ms height
     animation. `prefers-reduced-motion: reduce` users see instant
     toggle.
+
+---
+
+## Shipped 2026-05-14 — Polish-D (animated drill transition + pan momentum)
+
+Spec: `docs/superpowers/specs/2026-05-14-territory-polish-d-design.md`
+Plan: `docs/superpowers/plans/2026-05-14-territory-polish-d.md`
+
+Final follow-up polish pass on territory sub-projects 3 & 4.
+**Polish-A through Polish-D backlog is closed.**
+
+### What shipped
+
+- `lib/useCameraAnimation.ts` — RAF-driven center/zoom animation
+  hook with cubic ease-in-out, `animateTo(target, durationMs,
+  onComplete?)` imperative API, automatic cancellation on
+  imperative `setCenter`/`setZoom` calls, and unmount cleanup.
+  Respects `prefers-reduced-motion: reduce` (instant target +
+  microtask `onComplete`). Captures start values via
+  `setCenterState((c) => { startCenter = c; return c; })` so the
+  effect doesn't trip `react-hooks/set-state-in-effect`.
+- `lib/usePanMomentum.ts` — pan momentum handlers
+  (`onMoveStart`/`onMove`/`onMoveEnd`) that record velocity
+  samples during drag (last 80ms window, ring buffer of 8),
+  compute release velocity, and run a friction-decay RAF (0.92 per
+  frame) that drives `setCenter` until below the stop threshold.
+  Respects `prefers-reduced-motion: reduce`.
+- `components/territory/TerritoryApp.tsx` — owns a 3-phase
+  `TransitionState` (`idle | entering | exiting`). Watches
+  `drillDownCountryCode` via a `useRef`-tracked diff; on a `null →
+  iso` transition kicks off a camera animation (Mercator) or
+  cross-fade (US); on `iso → null` mirrors. Cross-fade path
+  unmounts after a 200ms timer; Mercator path unmounts via the
+  child view's `onCameraSettled` callback after the 300ms RAF
+  tween. A new `renderMap()` helper exhaustively covers all
+  combinations of phase × crossFade × drillDownCode.
+- `components/territory/map/WorldMapView.tsx` and
+  `DrillDownMapView.tsx` — replaced their local
+  `useState<[center, zoom]>` with `useCameraAnimation`; accept
+  three new optional props (`cameraTarget`, `onCameraSettled`,
+  `className`); wired `usePanMomentum` into `ZoomableGroup`'s
+  `onMoveStart`/`onMove`/`onMoveEnd` (zoom committed
+  synchronously in `onMoveEnd`, center handed off to the momentum
+  hook). The `onMove` prop is missing from
+  `react-simple-maps`'s bundled types; cast via the same
+  `Record<string, unknown>` idiom already used for
+  `filterZoomEvent`. The drill-down view preserved its existing
+  country-change re-derivation by calling the hook's imperative
+  `setCenter`/`setZoom` from the same
+  `prevInitialZoom`/`prevCenter` detection block (imperative calls
+  cancel any in-flight tween).
+
+### Implementation idioms worth knowing
+
+- **`useCameraAnimation` setters are value-only** (not functional
+  updaters). Callers that previously used `setZoom((z) => Math.min(z * 1.5, 8))`
+  patterns now read from `zoomRef.current` instead. 8 call sites
+  total across the two views were converted.
+- **Reduced-motion gate** is duplicated in both hooks
+  (`prefersReducedMotion()` helper inline in each file). Could be
+  lifted to a shared helper if a third user emerges.
+- **`onMove` type cast** wraps `react-simple-maps`'s incomplete
+  bundled types; runtime shape matches the hook's expectation.
+
+### Deviations from spec
+
+- The plan suggested creating a new `centerRef` in
+  `DrillDownMapView` to feed the momentum hook's `getCenter`. The
+  file already had a `currentCenterRef` (tracking the live
+  rendered center) — the implementer reused it instead of
+  introducing a duplicate ref. Matches the spec's intent.
+- The plan's spec mentioned the `drill-change effect` would not
+  need a timer for non-cross-fade paths. The implementation
+  followed that pattern. One inline
+  `// eslint-disable-next-line react-hooks/set-state-in-effect`
+  was added to silence a lint warning about `setTransition` inside
+  the effect — the state machine pattern is the intended design.
+
+### Out of scope (deferred)
+
+- **Rubber-band edges.** d3-zoom's `translateExtent` is
+  hard-clamped; elastic overshoot would require wrapping
+  `ZoomableGroup` with a custom pan-interceptor. Future Polish-E
+  if revived.
+- **Per-country target zoom.** A single `zoom = 6` covers all
+  countries because the drill-down view's `fitFeatures`
+  recomputes the true fit the instant it mounts — the camera
+  animation is visually directional, not precise.
+- **Native iPad/Safari multi-touch gestures.** Existing
+  `filterZoomEvent` handles wheel + trackpad pinch via the wheel
+  event path.
+
+### Verification
+
+`npx tsc --noEmit` clean. `npm run lint` exits 0 with 4 noisy
+`react-hooks/exhaustive-deps` warnings about the hook's setters
+(stable via `useCallback` chain — warnings are noisy but not
+bugs). `npm run build` clean (14/14 pages generated). Manual UI
+smoke checklist:
+
+1. Click a non-US country (Germany, Brazil, India) → world map
+   smoothly zooms toward the country over 300ms; drill-down view
+   takes over with state data.
+2. Click "World" breadcrumb from a drill-down → drill-down camera
+   zooms out over 300ms; world view resumes.
+3. Click the US → world fades out / drill-down fades in over
+   200ms.
+4. Pan-flick → camera continues drifting with visible inertia
+   ~1s, decaying smoothly.
+5. Slow pan, release with near-zero velocity → no momentum.
+6. Two consecutive country clicks (mid-animation) → second click
+   cancels first animation, starts new one.
+7. `prefers-reduced-motion: reduce` → all transitions instant; no
+   momentum decay.
+8. Polish-A through Polish-C features still work: selection chip,
+   `/` and `g` shortcuts, sidebar multi-select, bulk drag/delete,
+   undo/redo across all op types, tree open/close animation.
+
+---
+
+## Polish backlog status (closing 2026-05-14)
+
+All four follow-up polish passes for sub-projects 3 & 4 have
+shipped:
+
+- ✅ Polish-A — map selection chip + `/` / `g` shortcuts
+- ✅ Polish-B — Geos sidebar multi-select (selection + bulk drag + bulk delete)
+- ✅ Polish-C — universal undo/redo + tree expand/collapse animation
+- ✅ Polish-D — animated drill transition + pan momentum
+
+Out-of-scope follow-ups noted in the individual specs (rubber-band
+map edges, country-name resolution for the map selection chip,
+descendant dim during bulk drag, native iPad multi-touch) remain
+deferred. None block ongoing CRM work.
