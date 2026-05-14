@@ -68,6 +68,7 @@ export interface GeoSlice {
    * `reparent-children` removes the node but moves its direct children up to its parent.
    */
   removeGeoNode: (id: string, mode?: 'cascade' | 'reparent-children') => void;
+  removeGeoNodes: (ids: string[], mode?: 'cascade' | 'reparent-children') => void;
 
   assignCountryToGeo: (geoNodeId: string, countryCode: string) => void;
   assignStateToGeo: (geoNodeId: string, stateCode: string) => void;
@@ -352,6 +353,62 @@ export const createGeoSlice: StateCreator<TerritoryStore, [], [], GeoSlice> = (s
       };
     });
     // Reparent-children must run before the delete so children aren't orphaned at SET NULL.
+    for (const p of reparentPatches) {
+      fireWrite(
+        `reparentGeoNode(${p.id})`,
+        directusWrite.updateGeoNodeRemote(p.id, { parentId: p.parentId }),
+      );
+    }
+    if (dropIds.length > 0) fireWrite('deleteGeoNodes', directusWrite.deleteGeoNodes(dropIds));
+  },
+
+  removeGeoNodes(ids, mode = 'cascade') {
+    if (ids.length === 0) return;
+    let dropIds: string[] = [];
+    const reparentPatches: Array<{ id: string; parentId: string | null }> = [];
+    set((s) => {
+      // Filter to ids that actually exist
+      const valid = ids.filter((id) => s.geoNodes[id]);
+      if (valid.length === 0) return s;
+
+      if (mode === 'cascade') {
+        const drop = new Set<string>();
+        for (const id of valid) {
+          for (const did of descendantsOf(s.geoNodes, id)) drop.add(did);
+        }
+        dropIds = Array.from(drop);
+        const geoNodes = { ...s.geoNodes };
+        drop.forEach((nid) => { delete geoNodes[nid]; });
+        const activeStillExists = s.activePaintGeoId !== null && !drop.has(s.activePaintGeoId);
+        return {
+          geoNodes,
+          geoNodeOrder: s.geoNodeOrder.filter((nid) => !drop.has(nid)),
+          activePaintGeoId: activeStillExists ? s.activePaintGeoId : null,
+        };
+      }
+
+      // reparent-children: per-id, mirror single-node behavior
+      const removed = new Set(valid);
+      const geoNodes: Record<string, GeoNode> = {};
+      for (const [nid, n] of Object.entries(s.geoNodes)) {
+        if (removed.has(nid)) continue;
+        // If the node's parent is being removed, lift to that parent's parent
+        if (n.parentId && removed.has(n.parentId)) {
+          const newParent = s.geoNodes[n.parentId].parentId;
+          geoNodes[nid] = { ...n, parentId: newParent };
+          reparentPatches.push({ id: nid, parentId: newParent });
+        } else {
+          geoNodes[nid] = n;
+        }
+      }
+      dropIds = Array.from(removed);
+      const activeStillExists = s.activePaintGeoId !== null && !removed.has(s.activePaintGeoId);
+      return {
+        geoNodes,
+        geoNodeOrder: s.geoNodeOrder.filter((nid) => !removed.has(nid)),
+        activePaintGeoId: activeStillExists ? s.activePaintGeoId : null,
+      };
+    });
     for (const p of reparentPatches) {
       fireWrite(
         `reparentGeoNode(${p.id})`,
