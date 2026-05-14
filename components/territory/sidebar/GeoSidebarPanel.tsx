@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import {
   DndContext,
+  DragOverlay,
   KeyboardSensor,
   PointerSensor,
   closestCenter,
@@ -16,6 +17,7 @@ import { useGeoChildren, useGeoNodes, useGeoNodeOrder, useActions } from '@/hook
 import { useSelectedGeoNodeIds } from '@/store/slices/geoSelectionSelectors';
 import { filterGeoTree } from '@/lib/geoTreeFilter';
 import GeoNodeRow from './GeoNodeRow';
+import GeoSelectionDragOverlay from './GeoSelectionDragOverlay';
 import SidebarSearchInput from './SidebarSearchInput';
 
 function descendantsOfLocal(nodes: ReturnType<typeof useGeoNodes>, id: string): Set<string> {
@@ -37,11 +39,12 @@ export default function GeoSidebarPanel() {
   const roots = useGeoChildren(null);
   const nodes = useGeoNodes();
   const order = useGeoNodeOrder();
-  const { addGeoNode, setActivePaintGeo, reorderGeoNode, clearGeoSelection } = useActions();
+  const { addGeoNode, setActivePaintGeo, reorderGeoNode, reorderGeoNodes, clearGeoSelection } = useActions();
   const selectedGeoNodeIds = useSelectedGeoNodeIds();
 
   const [query, setQuery] = useState('');
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
+  const [bulkDragIds, setBulkDragIds] = useState<string[] | null>(null);
 
   const filter = useMemo(() => filterGeoTree(nodes, query), [nodes, query]);
 
@@ -58,11 +61,21 @@ export default function GeoSidebarPanel() {
   const dragDisabled = filter !== null;
 
   function handleDragStart(e: DragStartEvent) {
-    setActiveDragId(String(e.active.id));
+    const id = String(e.active.id);
+    setActiveDragId(id);
+    if (selectedGeoNodeIds.includes(id) && selectedGeoNodeIds.length > 1) {
+      // Preserve user-visible selection order for the batch
+      const batch = sortableIds.filter((nid) => selectedGeoNodeIds.includes(nid));
+      setBulkDragIds(batch);
+    } else {
+      setBulkDragIds(null);
+    }
   }
 
   function handleDragEnd(e: DragEndEvent) {
+    const batch = bulkDragIds;
     setActiveDragId(null);
+    setBulkDragIds(null);
     const { active, over } = e;
     if (!over || active.id === over.id) return;
     const activeId = String(active.id);
@@ -72,26 +85,41 @@ export default function GeoSidebarPanel() {
 
     const zone = (over.data.current as { zone?: 'before' | 'nest' | 'after' } | undefined)?.zone ?? 'after';
 
+    const computeBeforeId = (newParentId: string | null): string | null => {
+      const overIndex = order.indexOf(overId);
+      for (let i = overIndex + 1; i < order.length; i += 1) {
+        const nid = order[i];
+        if (nodes[nid]?.parentId === newParentId) return nid;
+      }
+      return null;
+    };
+
+    if (batch && batch.length > 1) {
+      // Bulk drag: reorderGeoNodes handles cycle / membership rejection internally.
+      if (zone === 'nest') {
+        reorderGeoNodes(batch, overId, null);
+        return;
+      }
+      const newParentId = overNode.parentId;
+      if (zone === 'before') {
+        reorderGeoNodes(batch, newParentId, overId);
+        return;
+      }
+      reorderGeoNodes(batch, newParentId, computeBeforeId(newParentId));
+      return;
+    }
+
+    // Singleton drag (unchanged behavior)
     if (zone === 'nest') {
       reorderGeoNode(activeId, overId, null);
       return;
     }
-
     const newParentId = overNode.parentId;
     if (zone === 'before') {
       reorderGeoNode(activeId, newParentId, overId);
       return;
     }
-    const overIndex = order.indexOf(overId);
-    let beforeId: string | null = null;
-    for (let i = overIndex + 1; i < order.length; i += 1) {
-      const nid = order[i];
-      if (nodes[nid]?.parentId === newParentId) {
-        beforeId = nid;
-        break;
-      }
-    }
-    reorderGeoNode(activeId, newParentId, beforeId);
+    reorderGeoNode(activeId, newParentId, computeBeforeId(newParentId));
   }
 
   const sortableIds = filter
@@ -133,7 +161,7 @@ export default function GeoSidebarPanel() {
             collisionDetection={closestCenter}
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
-            onDragCancel={() => setActiveDragId(null)}
+            onDragCancel={() => { setActiveDragId(null); setBulkDragIds(null); }}
           >
             <SortableContext items={sortableIds} strategy={verticalListSortingStrategy}>
               {roots
@@ -148,10 +176,19 @@ export default function GeoSidebarPanel() {
                     dragDisabled={dragDisabled}
                     descendantIds={descendantIds}
                     visibleOrder={sortableIds}
-                    bulkDragActive={false}
+                    bulkDragActive={
+                      bulkDragIds !== null
+                      && bulkDragIds.includes(node.id)
+                      && node.id !== activeDragId
+                    }
                   />
                 ))}
             </SortableContext>
+            <DragOverlay>
+              {activeDragId && bulkDragIds && bulkDragIds.length > 1 ? (
+                <GeoSelectionDragOverlay activeId={activeDragId} count={bulkDragIds.length} />
+              ) : null}
+            </DragOverlay>
           </DndContext>
         )}
       </div>
