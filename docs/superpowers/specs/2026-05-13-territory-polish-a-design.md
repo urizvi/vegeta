@@ -62,11 +62,16 @@ Add a new chip:
   other chips). Popover content:
   - Header row: `"Selected regions"` + small `Clear` text button that
     calls `clearSelection()` and closes the popover.
-  - Body: vertical list of selected codes, each row showing the
-    resolved region name. Codes are resolved via a new lightweight
-    selector `useRegionNameByIso(iso)` in `store/slices/mapUiSelectors`
-    that returns just the `name` field (avoid running the full
-    `useRegionRollup` per row when only the name is needed).
+  - Body: vertical list of selected codes. Each row shows the iso
+    code as the primary label (`"US"` or `"US:US-CA"`). For state
+    codes, a best-effort name resolver `useRegionNameByIso(iso)` (new,
+    in `store/slices/mapUiSelectors.ts`) splits on `:`, looks the
+    state code up in `getStatesForCountry(iso2)` from
+    `lib/stateLoader.ts`, and returns the state's `name` if cached.
+    The row then renders as `"California · US:US-CA"`. Country codes
+    and stale lookups fall back to showing only the code. Capturing
+    country display names is a Polish-B concern (the slice will grow
+    a name-cache parameter when bulk-select from the sidebar lands).
   - List is virtualized only if length > 50; otherwise rendered
     inline. Selection set is rarely that large for territory work — we
     accept un-virtualized rendering as the default and add a
@@ -169,8 +174,11 @@ Modified:
   (`'US:US-CA'`) codes: `useRegionNameByIso` resolves both. State
   codes resolve to the state's `name` (e.g. `"California"`).
 - Code in selection that no longer matches any region (stale, e.g.
-  data refresh removed it): `useRegionNameByIso` returns the raw code
-  as fallback so the user can still see it and click `✕` to remove.
+  data refresh removed it): `useRegionNameByIso` returns `null` and
+  the row renders only the code. User can still click `✕` to remove.
+- State code present but `stateLoader` cache empty (no drill-down has
+  happened yet this session): name resolution returns `null`, row
+  renders only the code — same fallback path.
 
 ## Verification
 
