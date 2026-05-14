@@ -254,20 +254,29 @@ export default function GeoNodeRow({
         />
       )}
 
-      {showExpanded && children.map((c) => (
-        <GeoNodeRow
-          key={c.id}
-          nodeId={c.id}
-          depth={depth + 1}
-          visibleIds={visibleIds}
-          forceExpandIds={forceExpandIds}
-          dragDisabled={dragDisabled}
-          descendantIds={descendantIds}
-          visibleOrder={visibleOrder}
-          bulkDragSet={bulkDragSet}
-          activeDragId={activeDragId}
-        />
-      ))}
+      <div
+        className={`grid motion-safe:transition-[grid-template-rows] motion-safe:duration-200 motion-safe:ease-out ${
+          showExpanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+        }`}
+        aria-hidden={!showExpanded}
+      >
+        <div className="overflow-hidden">
+          {children.map((c) => (
+            <GeoNodeRow
+              key={c.id}
+              nodeId={c.id}
+              depth={depth + 1}
+              visibleIds={visibleIds}
+              forceExpandIds={forceExpandIds}
+              dragDisabled={dragDisabled}
+              descendantIds={descendantIds}
+              visibleOrder={visibleOrder}
+              bulkDragSet={bulkDragSet}
+              activeDragId={activeDragId}
+            />
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
