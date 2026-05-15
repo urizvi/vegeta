@@ -95,15 +95,15 @@ export default function GeoNodeRow({
           <>
             <div
               ref={setBeforeDropRef}
-              className={`pointer-events-auto absolute inset-x-0 top-0 h-1/3 ${beforeIsOver ? 'border-t-2 border-brand' : ''}`}
+              className={`absolute inset-x-0 top-0 h-1/3 ${activeDragId ? 'pointer-events-auto' : 'pointer-events-none'} ${beforeIsOver ? 'border-t-2 border-brand' : ''}`}
             />
             <div
               ref={setNestDropRef}
-              className={`pointer-events-auto absolute inset-x-0 top-1/3 h-1/3 ${nestIsOver ? 'bg-brand-soft' : ''}`}
+              className={`absolute inset-x-0 top-1/3 h-1/3 ${activeDragId ? 'pointer-events-auto' : 'pointer-events-none'} ${nestIsOver ? 'bg-brand-soft' : ''}`}
             />
             <div
               ref={setAfterDropRef}
-              className={`pointer-events-auto absolute inset-x-0 bottom-0 h-1/3 ${afterIsOver ? 'border-b-2 border-brand' : ''}`}
+              className={`absolute inset-x-0 bottom-0 h-1/3 ${activeDragId ? 'pointer-events-auto' : 'pointer-events-none'} ${afterIsOver ? 'border-b-2 border-brand' : ''}`}
             />
           </>
         )}

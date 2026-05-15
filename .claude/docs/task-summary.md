@@ -1925,3 +1925,33 @@ Out-of-scope follow-ups noted in the individual specs (rubber-band
 map edges, country-name resolution for the map selection chip,
 descendant dim during bulk drag, native iPad multi-touch) remain
 deferred. None block ongoing CRM work.
+
+---
+
+## Fix 2026-05-14 — Geo paint mode regression
+
+**Symptom:** Clicking a Geo node in the sidebar no longer entered
+paint mode. Toolbar pill never appeared, cursor stayed default,
+and country/state clicks fell through to drill-down / no-op. Both
+world and drill-down maps affected (since neither ever saw an
+`activePaintGeoId`).
+
+**Root cause:** `GeoNodeRow.tsx` renders three absolute-positioned
+drop-zone overlays (before/nest/after thirds) on top of the
+clickable content row, with `pointer-events-auto` permanently on.
+The overlays have no `onClick`, so every click on a row landed on
+an overlay and bubbled up past the row's `onClick` (a sibling, not
+an ancestor) into a no-op. The structure had been this way since
+the original drag-and-drop reorder commit (`20a48b1`); paint
+appeared to work earlier because users were entering paint via
+"New geo" / "Add child" buttons (which call `setActivePaintGeo`
+directly), not via clicking an existing row.
+
+**Fix:** Gate `pointer-events-auto` on `activeDragId !== null`.
+Drop zones now use `pointer-events-none` at rest and only become
+interactive while a sortable drag is active. Drop-target detection
+during drag is unaffected (dnd-kit still tracks the refs);
+ordinary clicks now reach the row's handler and toggle paint mode.
+
+Edit is one inline class change per overlay in
+`components/territory/sidebar/GeoNodeRow.tsx`. Type-check clean.
