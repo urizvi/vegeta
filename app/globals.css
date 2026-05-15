@@ -217,8 +217,9 @@ body > * { position: relative; z-index: 1; }
 }
 *::-webkit-scrollbar-track { background: transparent; }
 
-/* Territory map focus ring — Sub-project 3 */
-.map-region-path:focus-visible {
-  outline: 2px solid var(--color-brand);
-  outline-offset: 1px;
-}
+/* Territory map: suppress the bounding-box focus outline on SVG paths.
+   The browser would otherwise draw a solid rectangle around the path's
+   bounding box on click/focus. Selection / pin / hover indication is
+   handled via path stroke (see CountryGeo / StateGeo). */
+.map-region-path:focus,
+.map-region-path:focus-visible { outline: none; }
