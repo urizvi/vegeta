@@ -1955,3 +1955,24 @@ ordinary clicks now reach the row's handler and toggle paint mode.
 
 Edit is one inline class change per overlay in
 `components/territory/sidebar/GeoNodeRow.tsx`. Type-check clean.
+
+---
+
+## Fix 2026-05-14 — Stray rectangle around country in select mode
+
+**Symptom:** After enabling multi-select from the toolbar and
+clicking a country, a solid brand-colored rectangle appeared
+enclosing the country's bounding box (not following the country
+border).
+
+**Root cause:** `.map-region-path:focus-visible` in
+`app/globals.css` set `outline: 2px solid var(--color-brand)`.
+Applied to an SVG `<path>`, CSS `outline` renders as a rectangle
+around the path's bounding box, not as a stroke along the path
+itself. Clicking a country focuses the path, triggering the rule.
+
+**Fix:** Replace the rule with `outline: none` on both `:focus`
+and `:focus-visible` for `.map-region-path`. Selection / pin /
+hover indication is already handled via path stroke in
+`CountryGeo` / `StateGeo`, so no replacement focus indicator was
+added.
