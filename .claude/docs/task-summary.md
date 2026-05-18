@@ -1976,3 +1976,40 @@ and `:focus-visible` for `.map-region-path`. Selection / pin /
 hover indication is already handled via path stroke in
 `CountryGeo` / `StateGeo`, so no replacement focus indicator was
 added.
+
+---
+
+## Change 2026-05-14 — Drill-down moved to double-click
+
+**Before:** Single-clicking a country on the world map both
+pinned/unpinned it AND called `onDrillDown` to switch to the
+drill-down view. Double-click did an in-place 2.5× zoom centered
+on the country.
+
+**After:** Single-click only toggles pin/unpin. Double-click
+triggers drill-down. The in-place 2.5× zoom on dblclick is gone
+(less useful at country level; users can still pan and use
+wheel/buttons to zoom the world map).
+
+**Files:**
+- `components/territory/map/WorldMapView.tsx` — removed
+  `onDrillDown` from `handleClickCountry`; `handleDoubleClickFeature`
+  now resolves the geo's name from `geographiesRef` and calls
+  `onDrillDown(entityCode, name)`.
+- `components/territory/map/MapHelpPopover.tsx` — added
+  "Click → pin/unpin country" and "Double-click → drill into
+  country" rows to the keyboard shortcuts panel.
+
+Paint / eraser / select-mode click branches are unchanged. Drill
+behavior in `DrillDownMapView` is unaffected (states remain
+paint-only).
+
+## Architecture decision — Sellable modules (2026-05-17)
+
+Brainstormed productizing the three areas as separately-sellable units.
+Decision: **modular monolith with workspace entitlements**, Accounts as the
+required base, Tasks + Territory&Team as paid add-ons. Seam enforced via
+module manifests + ESLint boundary rules (no physical relocation yet); member
+directory moves Core-side to break Tasks→Territory coupling. Server-authoritative
+Directus access policies + route gate + conditional hydration. Self-serve billing
+deferred to a future spec. Spec: docs/superpowers/specs/2026-05-17-sellable-modules-entitlements-design.md
