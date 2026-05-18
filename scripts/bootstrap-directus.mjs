@@ -685,6 +685,62 @@ const ACTIVITIES_COLLECTION = {
   ],
 };
 
+const WORKSPACE_ENTITLEMENTS_COLLECTION = {
+  collection: 'workspace_entitlements',
+  meta: { icon: 'verified', note: 'Per-workspace module entitlements — default-deny: no row means no access to the add-on collection' },
+  schema: {},
+  fields: [
+    {
+      field: 'id',
+      type: 'uuid',
+      meta: { hidden: true, readonly: true, interface: 'input', special: ['uuid'] },
+      schema: { is_primary_key: true, has_auto_increment: false },
+    },
+    {
+      field: 'workspace_id',
+      type: 'uuid',
+      meta: { interface: 'select-dropdown-m2o', options: { template: '{{name}}' }, special: ['m2o'], required: true },
+    },
+    {
+      field: 'module',
+      type: 'string',
+      meta: {
+        interface: 'select-dropdown',
+        required: true,
+        note: 'The sellable module this entitlement covers (tasks | territory)',
+        options: {
+          choices: [
+            { text: 'Tasks',     value: 'tasks' },
+            { text: 'Territory', value: 'territory' },
+          ],
+        },
+      },
+    },
+    {
+      field: 'status',
+      type: 'string',
+      meta: {
+        interface: 'select-dropdown',
+        required: true,
+        note: 'active | trial | disabled',
+        options: {
+          choices: [
+            { text: 'Active',   value: 'active' },
+            { text: 'Trial',    value: 'trial' },
+            { text: 'Disabled', value: 'disabled' },
+          ],
+        },
+      },
+      schema: { default_value: 'disabled' },
+    },
+    {
+      field: 'expires_at',
+      type: 'timestamp',
+      meta: { interface: 'datetime', note: 'null = never expires; set for trial/time-limited entitlements' },
+    },
+  ],
+};
+
 const TASKS_COLLECTION = {
   collection: 'tasks',
   meta: { icon: 'check_box', note: 'To-dos — optionally pinned to an account', sort_field: 'due_at' },
@@ -802,12 +858,38 @@ async function ensurePermission(token, policyId, collection, action, opts = {}) 
     presets: null,
   };
   if (opts.scopedByWorkspace) {
-    const filter = { workspace_id: { _eq: '$CURRENT_USER.current_workspace' } };
+    const wsFilter = { workspace_id: { _eq: '$CURRENT_USER.current_workspace' } };
     if (action === 'create') {
-      body.validation = filter;
+      body.validation = wsFilter;
       body.presets = { workspace_id: '$CURRENT_USER.current_workspace' };
+    } else if (opts.entitlementModule) {
+      // Combine workspace scope with entitlement check via _and.
+      // Requires a non-expired, non-disabled workspace_entitlements row for
+      // the owning module.  The relational filter traverses the
+      // workspace_entitlements collection via the shared workspace_id field.
+      body.permissions = {
+        _and: [
+          wsFilter,
+          {
+            workspace_id: {
+              workspace_entitlements: {
+                _and: [
+                  { module:  { _eq: opts.entitlementModule } },
+                  { status:  { _neq: 'disabled' } },
+                  {
+                    _or: [
+                      { expires_at: { _null: true } },
+                      { expires_at: { _gt: '$NOW' } },
+                    ],
+                  },
+                ],
+              },
+            },
+          },
+        ],
+      };
     } else {
-      body.permissions = filter;
+      body.permissions = wsFilter;
     }
   } else if (opts.scopedByUser) {
     // workspace_members: each user sees / mutates only their own membership row.
@@ -856,12 +938,37 @@ const WORKSPACE_SCOPED_COLLECTIONS = [
   'contacts',
   'activities',
   'tasks',
+  // workspace_entitlements is intentionally here: the non-admin policy needs
+  // workspace-scoped READ on it so the app can read its own entitlements.
+  // The generic Phase 1.1b loop also attempts to add its workspace_id
+  // field/relation (with on_delete: SET NULL), but the EXPLICIT relation block
+  // above runs first and wins with CASCADE — do NOT remove the explicit block
+  // in favour of the generic loop, which would silently downgrade to SET NULL.
+  'workspace_entitlements',
 ];
+
+// Add-on collections that require an active entitlement row in
+// workspace_entitlements to be readable.  Map: collection → module name.
+const ADDON_COLLECTION_MODULE = {
+  tasks:             'tasks',
+  geo_nodes:         'territory',
+  teams:             'territory',
+  hierarchy_levels:  'territory',
+};
 
 async function grantPolicyPermissions(token, policyId, actions, label) {
   for (const collection of WORKSPACE_SCOPED_COLLECTIONS) {
     for (const action of actions) {
-      await ensurePermission(token, policyId, collection, action, { scopedByWorkspace: true, label });
+      const addonModule = ADDON_COLLECTION_MODULE[collection];
+      // For add-on collections, gate READ with an entitlement check.
+      // All other actions (create/update/delete) remain workspace-scoped only
+      // (server enforces entitlement for reads; write access is handled
+      // separately by app-level guards).
+      const opts = { scopedByWorkspace: true, label };
+      if (addonModule && action === 'read') {
+        opts.entitlementModule = addonModule;
+      }
+      await ensurePermission(token, policyId, collection, action, opts);
     }
   }
   for (const action of actions) {
@@ -951,6 +1058,7 @@ async function main() {
   await tryCreate(token, '/collections', WORKSPACES_COLLECTION, 'workspaces');
   await tryCreate(token, '/collections', WORKSPACE_MEMBERS_COLLECTION, 'workspace_members');
   await tryCreate(token, '/collections', WORKSPACE_SETTINGS_COLLECTION, 'workspace_settings');
+  await tryCreate(token, '/collections', WORKSPACE_ENTITLEMENTS_COLLECTION, 'workspace_entitlements');
 
   console.log('→ Creating collections');
   await tryCreate(token, '/collections', FIELD_DEFINITIONS_COLLECTION, 'field_definitions');
@@ -1205,6 +1313,83 @@ async function main() {
     meta: { one_field: null, sort_field: null, one_deselect_action: 'nullify' },
     schema: { on_delete: 'CASCADE' },
   }, 'workspace_settings.workspace_id → workspaces');
+
+  // AUTHORITATIVE relation for workspace_entitlements — uses CASCADE and sets
+  // the named O2M alias required by the permission filter.  The generic
+  // Phase 1.1b loop also touches this relation (on_delete: SET NULL) but this
+  // explicit block runs first and wins.  Do NOT remove this in favour of the
+  // generic loop or the on_delete will silently downgrade to SET NULL.
+  await tryCreate(token, '/relations', {
+    collection: 'workspace_entitlements',
+    field: 'workspace_id',
+    related_collection: 'workspaces',
+    // one_field MUST be named: the add-on read permission filter traverses
+    // workspaces → workspace_entitlements; a null alias silently disables the
+    // entitlement gate.
+    meta: { one_field: 'workspace_entitlements', sort_field: null, one_deselect_action: 'nullify' },
+    schema: { on_delete: 'CASCADE' },
+  }, 'workspace_entitlements.workspace_id → workspaces');
+
+  // ── MANUAL VERIFICATION CHECKLIST (workspace_entitlements + default-deny) ─
+  //
+  // VERIFY FIRST — before any of the steps below, confirm the O2M alias exists:
+  //   Directus Admin → Data Model → workspaces → check that a field/alias named
+  //   "workspace_entitlements" (O2M) is present.  If it is absent the
+  //   entitlement gate is silently broken — stop and re-run this script.
+  //
+  // After running this script against a fresh or existing dev Directus instance:
+  //
+  // 1. Fresh dev workspace with NO entitlement rows:
+  //      GET /items/tasks (as a non-admin app user)
+  //      Expected: { data: [] }  — zero rows returned, NOT a 403 with rows.
+  //
+  // 2. Same workspace, no entitlement rows:
+  //      GET /items/geo_nodes
+  //      Expected: { data: [] }
+  //
+  // 3. Insert an active entitlement for the tasks module:
+  //      POST /items/workspace_entitlements
+  //      { workspace_id: "<your-ws-id>", module: "tasks", status: "active", expires_at: null }
+  //
+  // 4. GET /items/tasks (same non-admin user, same workspace)
+  //    Expected: returns the workspace's actual task rows.
+  //
+  // 5. Set the entitlement row status to 'disabled':
+  //      PATCH /items/workspace_entitlements/<id>  { status: "disabled" }
+  //    GET /items/tasks → Expected: { data: [] }  (access revoked immediately)
+  //
+  // 6. Core collection is NEVER gated by entitlements:
+  //      GET /items/accounts  (in ALL above states)
+  //      Expected: returns rows in all states — accounts are always accessible.
+  //
+  // 7. Re-run `node scripts/bootstrap-directus.mjs`:
+  //    Expected console output for workspace_entitlements collection:
+  //      "⟳ workspace_entitlements already exists — skipping"
+  //    Each add-on collection (tasks, geo_nodes, teams, hierarchy_levels)
+  //    shows "✓ updated permission: read <collection>" — NOT a second create.
+  //    Query GET /permissions filtered to the non-admin policy → each
+  //    add-on collection has exactly ONE read permission row (no duplicates).
+  //
+  // 8. Trial-expiry — expired trial DENIES (exercises $NOW branch):
+  //      POST /items/workspace_entitlements
+  //      { workspace_id: "<ws-id>", module: "territory", status: "trial",
+  //        expires_at: "<ISO timestamp 1 hour in the PAST>" }
+  //    GET /items/geo_nodes       → Expected: { data: [] }
+  //    GET /items/teams           → Expected: { data: [] }
+  //    GET /items/hierarchy_levels → Expected: { data: [] }
+  //
+  // 9. Trial-expiry — future trial GRANTS:
+  //      PATCH /items/workspace_entitlements/<id>
+  //      { expires_at: "<ISO timestamp 1 hour in the FUTURE>" }
+  //    GET /items/geo_nodes       → Expected: returns rows
+  //    GET /items/teams           → Expected: returns rows
+  //    GET /items/hierarchy_levels → Expected: returns rows
+  //
+  // 10. Write-not-gated — entitlement gate is READ-only; writes are not blocked:
+  //     Using a non-admin user whose tasks entitlement is disabled (or absent):
+  //       POST /items/tasks  { workspace_id: "<ws-id>", ... }
+  //       Expected: 200 / created item — write succeeds even without entitlement.
+  // ─────────────────────────────────────────────────────────────────────────
 
   console.log('→ Ensuring directus_users.current_workspace field');
   await tryCreateField(token, 'directus_users', {
