@@ -4,6 +4,15 @@ import nextTs from "eslint-config-next/typescript";
 
 // Territory-owned internals. membersSlice is intentionally NOT here — it is
 // Core (shared identity directory) per the entitlements seam spec.
+// ─── Boundary seam documentation ──────────────────────────────────────────────
+// The override blocks below forbid DIRECT imports of module-internal store
+// slices (e.g. geoSlice, tasksSlice, tasksSelectors).  They intentionally do
+// NOT restrict `@/store/territoryStore` (the combined Zustand store) or
+// `@/store/selectors` — those are Core-owned aggregation points that any
+// module may legitimately use (e.g. Tasks reading `s.members`).  The seam
+// enforced here is naming/direct-slice-access discipline, not deep
+// store-access discipline.
+// ──────────────────────────────────────────────────────────────────────────────
 const TERRITORY_INTERNALS = [
   "@/store/slices/geoSlice",
   "@/store/slices/geoSelectionSlice",
