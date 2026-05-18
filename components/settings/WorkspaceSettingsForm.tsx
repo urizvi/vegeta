@@ -8,7 +8,9 @@ import {
   useWorkspaceSettings,
   type ModulesEnabled,
 } from '@/hooks/useWorkspaceSettings';
-import { updateWorkspaceSettings } from '@/lib/workspace';
+import { updateWorkspaceSettings, getMyWorkspaceRole } from '@/lib/workspace';
+import { buildEntitlementPatch, isWorkspaceOwner, setEntitlement } from '@/lib/entitlementsAdmin';
+import type { ModuleKey } from '@/lib/entitlements';
 
 interface FormState {
   entity_noun_singular: string;
@@ -44,6 +46,7 @@ export default function WorkspaceSettingsForm() {
   const pluralId = useId();
   const ownerId = useId();
   const colorId = useId();
+  const moduleUid = useId();
 
   const [form, setForm] = useState<FormState>(() => settingsToForm(settings));
   const [hydrated, setHydrated] = useState(false);
@@ -51,11 +54,58 @@ export default function WorkspaceSettingsForm() {
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
 
+  // Modules & billing admin (owner-only)
+  const [myRole, setMyRole] = useState<string | null>(null);
+  const [moduleStatus, setModuleStatus] = useState<Record<ModuleKey, string>>({
+    tasks: 'disabled',
+    territory: 'disabled',
+  });
+  const [moduleExpiry, setModuleExpiry] = useState<Record<ModuleKey, string>>({
+    tasks: '',
+    territory: '',
+  });
+  const [moduleSaving, setModuleSaving] = useState<Record<ModuleKey, boolean>>({
+    tasks: false,
+    territory: false,
+  });
+  const [moduleError, setModuleError] = useState<Record<ModuleKey, string | null>>({
+    tasks: null,
+    territory: null,
+  });
+  const [moduleSavedAt, setModuleSavedAt] = useState<Record<ModuleKey, number | null>>({
+    tasks: null,
+    territory: null,
+  });
+
   useEffect(() => {
     if (hydrated) return;
     setForm(settingsToForm(settings));
     setHydrated(true);
   }, [settings, hydrated]);
+
+  useEffect(() => {
+    if (!workspaceId) return;
+    getMyWorkspaceRole(workspaceId).then(setMyRole).catch(() => setMyRole(null));
+  }, [workspaceId]);
+
+  async function saveModule(module: ModuleKey) {
+    if (!workspaceId) return;
+    setModuleError((prev) => ({ ...prev, [module]: null }));
+    setModuleSaving((prev) => ({ ...prev, [module]: true }));
+    try {
+      await setEntitlement(
+        buildEntitlementPatch(workspaceId, module, moduleStatus[module] as 'active' | 'trial' | 'disabled', moduleExpiry[module]),
+      );
+      setModuleSavedAt((prev) => ({ ...prev, [module]: Date.now() }));
+    } catch (err) {
+      setModuleError((prev) => ({
+        ...prev,
+        [module]: err instanceof Error ? err.message : 'Failed to save',
+      }));
+    } finally {
+      setModuleSaving((prev) => ({ ...prev, [module]: false }));
+    }
+  }
 
   function toggleModule(key: keyof ModulesEnabled) {
     setForm((f) => ({
@@ -198,6 +248,78 @@ export default function WorkspaceSettingsForm() {
             {form.owner_noun.toLowerCase() || 'owner'};{' '}
             {form.entity_noun_plural.toLowerCase() || 'records'} list page under <code>/accounts</code>.
           </div>
+
+          {isWorkspaceOwner(myRole) && (
+            <fieldset className="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
+              <legend className="mb-3 px-1 text-xs font-medium text-slate-600 dark:text-slate-400">
+                Modules &amp; billing
+              </legend>
+              <div className="space-y-4">
+                {(['tasks', 'territory'] as ModuleKey[]).map((module) => {
+                  const statusId = `${moduleUid}-${module}-status`;
+                  const expiryId = `${moduleUid}-${module}-expiry`;
+                  return (
+                  <div key={module} className="space-y-2">
+                    <p className="text-sm font-medium capitalize text-slate-700 dark:text-slate-300">
+                      {module}
+                    </p>
+                    <div className="flex flex-wrap items-end gap-3">
+                      <div>
+                        <label htmlFor={statusId} className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
+                          Status
+                        </label>
+                        <select
+                          id={statusId}
+                          value={moduleStatus[module]}
+                          onChange={(e) =>
+                            setModuleStatus((prev) => ({ ...prev, [module]: e.target.value }))
+                          }
+                          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                        >
+                          <option value="disabled">disabled</option>
+                          <option value="trial">trial</option>
+                          <option value="active">active</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label htmlFor={expiryId} className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
+                          Trial expiry
+                        </label>
+                        <input
+                          id={expiryId}
+                          type="date"
+                          value={moduleExpiry[module]}
+                          onChange={(e) =>
+                            setModuleExpiry((prev) => ({ ...prev, [module]: e.target.value }))
+                          }
+                          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        disabled={moduleSaving[module] || !workspaceId}
+                        onClick={() => saveModule(module)}
+                        className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
+                      >
+                        {moduleSaving[module] ? 'Saving…' : 'Save'}
+                      </button>
+                    </div>
+                    {moduleError[module] && (
+                      <p role="alert" className="text-xs text-rose-600 dark:text-rose-400">
+                        {moduleError[module]}
+                      </p>
+                    )}
+                    {moduleSavedAt[module] && !moduleError[module] && (
+                      <p className="text-xs text-slate-500">
+                        Saved {new Date(moduleSavedAt[module]!).toLocaleTimeString()}
+                      </p>
+                    )}
+                  </div>
+                  );
+                })}
+              </div>
+            </fieldset>
+          )}
 
           {error && (
             <p role="alert" className="text-xs text-rose-600 dark:text-rose-400">

@@ -210,6 +210,22 @@ async function ensureMembership(workspaceId: string, role: 'owner' | 'member' = 
   });
 }
 
+/**
+ * Fetch the current user's role for a given workspace.
+ * Returns the `role` field from the caller's `workspace_members` row,
+ * or null if the row is not found or the request fails.
+ */
+export async function getMyWorkspaceRole(workspaceId: string): Promise<string | null> {
+  const base = requireBaseUrl();
+  const res = await fetch(
+    `${base}/items/workspace_members?filter[workspace_id][_eq]=${encodeURIComponent(workspaceId)}&fields=role&limit=1`,
+    { credentials: 'include', cache: 'no-store' },
+  );
+  if (!res.ok) return null;
+  const json = (await res.json()) as { data?: Array<{ role: string | null }> };
+  return json.data?.[0]?.role ?? null;
+}
+
 function slugify(name: string): string {
   return name
     .toLowerCase()
