@@ -171,12 +171,9 @@ export default function Toolbar({ drillDownCountryName }: ToolbarProps) {
       <nav className="ml-1 flex items-center gap-0.5 rounded-[10px] border border-hairline bg-sunken/70 p-0.5">
         <span className={navActive}>Territory</span>
         <Link href="/accounts" className={navLink}>{entityPlural}</Link>
-        {navModules.map((m) => (
+        {navModules.filter((m) => m.key !== 'territory').map((m) => (
           <Link key={m.key} href={m.navHref} className={navLink}>{m.navLabel}</Link>
         ))}
-        {navModules.some((m) => m.key === 'territory') && (
-          <Link href="/teams" className={navLink}>Teams</Link>
-        )}
       </nav>
 
       {/* Breadcrumb */}

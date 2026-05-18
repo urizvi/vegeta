@@ -52,14 +52,6 @@ export default function TeamsAdminView() {
               {m.navLabel}
             </Link>
           ))}
-          {navModules.some((m) => m.key === 'territory') && (
-            <Link
-              href="/teams"
-              className="rounded-md px-2.5 py-1 font-medium text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
-            >
-              Teams
-            </Link>
-          )}
           <Link
             href="/accounts"
             className="rounded-md px-2.5 py-1 font-medium text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"

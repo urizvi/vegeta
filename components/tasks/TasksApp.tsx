@@ -95,7 +95,7 @@ export default function TasksApp() {
         <span className="text-sm font-bold text-slate-800 dark:text-slate-100">Sales Deployment</span>
         <WorkspaceSwitcher />
         <div className="flex items-center rounded-lg border border-slate-200 p-0.5 text-xs dark:border-slate-700">
-          {navModules.map((m) => (
+          {navModules.filter((m) => m.key !== 'tasks').map((m) => (
             <Link
               key={m.key}
               href={m.navHref}
