@@ -10,6 +10,7 @@ import { useAllTasks } from '@/store/slices/tasksSelectors';
 import { useActions } from '@/store/selectors';
 import { useEntityNoun } from '@/hooks/useEntityNoun';
 import { useModuleEnabled } from '@/hooks/useModuleEnabled';
+import { useNavModules } from '@/hooks/useNavModules';
 import WorkspaceSwitcher from '@/components/WorkspaceSwitcher';
 
 type Filter = 'open' | 'overdue' | 'completed' | 'all';
@@ -22,8 +23,8 @@ export default function TasksApp() {
   const { addTask, toggleTaskComplete, removeTask, updateTask } = useActions();
   const router = useRouter();
   const entityPlural = useEntityNoun('plural');
-  const territoryEnabled = useModuleEnabled('territory');
   const tasksEnabled = useModuleEnabled('tasks');
+  const navModules = useNavModules();
 
   const [filter, setFilter] = useState<Filter>('open');
   const [assigneeFilter, setAssigneeFilter] = useState<string>('');
@@ -94,12 +95,21 @@ export default function TasksApp() {
         <span className="text-sm font-bold text-slate-800 dark:text-slate-100">Sales Deployment</span>
         <WorkspaceSwitcher />
         <div className="flex items-center rounded-lg border border-slate-200 p-0.5 text-xs dark:border-slate-700">
-          {territoryEnabled && (
+          {navModules.map((m) => (
             <Link
-              href="/territory"
+              key={m.key}
+              href={m.navHref}
               className="rounded-md px-2.5 py-1 font-medium text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
             >
-              Territory
+              {m.navLabel}
+            </Link>
+          ))}
+          {navModules.some((m) => m.key === 'territory') && (
+            <Link
+              href="/teams"
+              className="rounded-md px-2.5 py-1 font-medium text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+            >
+              Teams
             </Link>
           )}
           <Link
@@ -107,12 +117,6 @@ export default function TasksApp() {
             className="rounded-md px-2.5 py-1 font-medium text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
           >
             {entityPlural}
-          </Link>
-          <Link
-            href="/teams"
-            className="rounded-md px-2.5 py-1 font-medium text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
-          >
-            Teams
           </Link>
           <span className="rounded-md bg-slate-900 px-2.5 py-1 font-medium text-white dark:bg-slate-100 dark:text-slate-900">
             Tasks
