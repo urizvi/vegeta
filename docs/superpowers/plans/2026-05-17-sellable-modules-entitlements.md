@@ -608,6 +608,30 @@ git commit -m "feat(seam): ESLint module boundary rules (membersSlice is Core)"
 
 ---
 
+## Task 4b: Resolve discovered Core→Tasks seam violation
+
+**Discovered during Task 4 execution.** The boundary rule correctly flagged a
+real pre-existing violation: `components/accounts/detail/AccountDetail.tsx` and
+`components/accounts/detail/TasksTab.tsx` (Core) import `useTasksForAccount`
+from `@/store/slices/tasksSelectors` (Tasks internal). User decision: **extract
+the Tasks tab into the Tasks module; Core mounts it lazily behind the Tasks
+entitlement.** Tab disappears for non-Tasks customers (correct per "Accounts is
+the base").
+
+**Files:**
+- Create: `components/tasks/AccountTasksTab.tsx` (moved from `components/accounts/detail/TasksTab.tsx`)
+- Delete: `components/accounts/detail/TasksTab.tsx`
+- Modify: `components/accounts/detail/AccountDetail.tsx`
+
+- [ ] Move `TasksTab.tsx` content verbatim to `components/tasks/AccountTasksTab.tsx` (default export `AccountTasksTab`, same `{ accountId }` prop). Tasks-internal imports are allowed there.
+- [ ] In `AccountDetail.tsx`: remove `import { useTasksForAccount } from '@/store/slices/tasksSelectors'`, remove `import TasksTab from './TasksTab'`, remove `const tasks = useTasksForAccount(accountId)`. Add `import dynamic from 'next/dynamic'` and `import { useModuleEntitled } from '@/hooks/useEntitlements'`. Add `const AccountTasksTab = dynamic(() => import('@/components/tasks/AccountTasksTab'), { ssr: false });` and `const tasksEntitled = useModuleEntitled('tasks');`.
+- [ ] Tasks tab visible iff `tasksOn && tasksEntitled` (entitled AND modulesEnabled, per spec reconciliation). Drop the Tasks tab `count` badge (Core must not read Tasks data; the extracted component already shows its own count header). Update the `tabs` useMemo deps accordingly (remove `tasks.length`, add `tasksEntitled`). Render `{tab === 'tasks' && tasksOn && tasksEntitled && <AccountTasksTab accountId={accountId} />}`.
+- [ ] Consult `node_modules/next/dist/docs/` for the Next 16 `next/dynamic` API before writing it (AGENTS.md: this Next version has breaking changes).
+- [ ] Verify: `npm run lint` has ZERO `no-restricted-imports` errors; `npx tsc --noEmit` clean; full `npm test` green.
+- [ ] Commit (after the Task 4 config/test commit) with: `refactor(seam): extract account Tasks tab into Tasks module behind entitlement`.
+
+---
+
 ## Task 5: Route Gate + Upgrade Page
 
 **Files:**

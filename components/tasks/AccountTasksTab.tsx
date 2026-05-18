@@ -5,7 +5,7 @@ import { useTerritoryStore } from '@/store/territoryStore';
 import { useTasksForAccount } from '@/store/slices/tasksSelectors';
 import { useActions } from '@/store/selectors';
 
-export default function TasksTab({ accountId }: { accountId: string }) {
+export default function AccountTasksTab({ accountId }: { accountId: string }) {
   // Snapshot "now" at mount so the overdue check is pure across re-renders.
   // Refreshes when the user navigates away and back — good enough for visual cue.
   const [now] = useState(() => Date.now());
