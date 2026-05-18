@@ -2,6 +2,7 @@
 
 import dynamic from 'next/dynamic';
 import DirectusHydrationBoundary from '@/components/DirectusHydrationBoundary';
+import ModuleGate from '@/components/ModuleGate';
 
 const TeamsAdminView = dynamic(
   () => import('@/components/teams/TeamsAdminView'),
@@ -10,8 +11,10 @@ const TeamsAdminView = dynamic(
 
 export default function TeamsClient() {
   return (
-    <DirectusHydrationBoundary>
-      <TeamsAdminView />
-    </DirectusHydrationBoundary>
+    <ModuleGate moduleKey="territory">
+      <DirectusHydrationBoundary>
+        <TeamsAdminView />
+      </DirectusHydrationBoundary>
+    </ModuleGate>
   );
 }
