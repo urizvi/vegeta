@@ -10,6 +10,9 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./test/setup.ts'],
     globals: false,
+    env: {
+      NEXT_PUBLIC_DIRECTUS_URL: 'http://localhost:8055',
+    },
   },
   resolve: {
     alias: { '@': rootDir },
