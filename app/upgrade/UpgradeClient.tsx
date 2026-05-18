@@ -9,8 +9,8 @@ const COPY: Record<string, { title: string; blurb: string }> = {
 };
 
 export default function UpgradeClient() {
-  const module = useSearchParams().get('module') ?? '';
-  const c = COPY[module] ?? { title: 'This module', blurb: 'This module is not part of your plan.' };
+  const moduleKey = useSearchParams().get('module') ?? '';
+  const c = COPY[moduleKey] ?? { title: 'This module', blurb: 'This module is not part of your plan.' };
   return (
     <main className="mx-auto flex min-h-screen max-w-lg flex-col items-center justify-center gap-4 p-8 text-center">
       <h1 className="font-[family-name:var(--font-fraunces)] text-2xl">{c.title} is not in your plan</h1>
