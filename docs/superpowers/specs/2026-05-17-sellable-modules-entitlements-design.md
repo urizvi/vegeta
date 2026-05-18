@@ -59,10 +59,11 @@ directory is currently bundled inside the Territory module. That makes Tasks dep
 Territory, violating the dependency rule and blocking any future Tasks-without-Territory
 sale.
 
-**Fix:** the member/people directory becomes a **Core** concern (shared identity layer).
-Territory's teams/regions reference Core members; Tasks' assignee references Core
-members. This is a boundary correction, not new functionality — in scope. Exact
-`membersSlice` consumers to be confirmed during planning.
+**Fix (minimal-moves form):** `membersSlice` is **reclassified as Core** in the
+ESLint boundary map — no physical file move. A Tasks→members import then counts
+as Tasks→Core (allowed), not Tasks→Territory (forbidden). Territory and Tasks
+both legitimately consume the Core member directory. This is a classification
+correction, not new functionality — in scope.
 
 ## Entitlements Data Model (Directus)
 
@@ -81,6 +82,22 @@ A `useEntitlements()` hook caches the resolved entitlement set for the current
 workspace, mirroring the existing cache pattern in `lib/workspace.ts`
 (`current_workspace`). Resolution treats `trial` with a future `expires_at` as
 entitled; `disabled`, missing, or expired-trial as not entitled.
+
+### Reconciliation with the existing `modulesEnabled` toggle
+
+The codebase already has `hooks/useWorkspaceSettings.ts → modulesEnabled`
+(`{ territory, contacts, activities, tasks }`, **default all `true`**, client
+side only). It is a UX show/hide toggle, **not** a paid gate. The two layers
+are kept distinct and strictly ranked:
+
+1. **Entitlement** (new, server-authoritative, **default-deny**) decides
+   *access*. Not entitled ⇒ no rows from Directus, route redirects to upgrade,
+   nav hidden. `modulesEnabled` is **not consulted** in this case.
+2. **`modulesEnabled`** (existing, client, default-on) is consulted **only when
+   the module is entitled**, as a within-plan show/hide preference.
+
+Net visibility rule: a module renders iff **entitled AND `modulesEnabled`**.
+No second source of truth for access; `modulesEnabled` never grants access.
 
 ## Enforcement — Defense in Depth
 
