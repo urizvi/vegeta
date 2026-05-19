@@ -2047,3 +2047,16 @@ deferred to a future spec. Spec: docs/superpowers/specs/2026-05-17-sellable-modu
 3. Account-detail Tasks tab no longer shows a count badge and requires the tasks entitlement.
 4. **Directus deploy caveat (existing instances):** `workspace_entitlements.workspace_id → workspaces` relation's `one_field` is NOT auto-updated by the idempotent bootstrap (`tryCreate` skips existing) — requires a manual relation-meta PATCH (`meta.one_field: 'workspace_entitlements'`) or a full recreate. Fresh bootstraps are correct. Manual verification checklist in `scripts/bootstrap-directus.mjs`.
 5. Self-serve billing (Stripe/checkout/webhooks) explicitly out of scope — future spec.
+
+Final cross-cutting review (2026-05-18) — READY TO MERGE, no critical/important
+issues. Three minor non-blocking follow-ups recorded:
+6. Transient entitlement-fetch failure caches `DENY_ALL` with no TTL/retry, so
+   a network blip can lock out an *entitled* user until reload (fail-safe
+   direction, UX only). Consider not caching error results or a short TTL.
+7. `ModuleGate` gates on entitlement only — a workspace entitled-to-X but with
+   `modules_enabled.X = false` hides the nav link yet `/X` stays directly
+   reachable and hydrates. Consistent with spec (entitlement = security
+   boundary; modulesEnabled = visibility), recorded as a conscious decision.
+8. Cosmetic: `/teams` shows a Territory nav link while on Teams (both are the
+   territory module); other toolbars exclude the current section. No
+   correctness/access impact.
