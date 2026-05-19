@@ -38,3 +38,21 @@ export function resolveEntitlementMap(
     territory: resolveEntitlement(byModule.get('territory'), now),
   };
 }
+
+/** Far-future sentinel meaning "entitled with no expiry". */
+export const PERPETUAL_SENTINEL = '9999-12-31T00:00:00.000Z';
+
+/**
+ * Project an entitlement (status + expires_at) onto the value stored in the
+ * denormalized `workspaces.<module>_entitled_until` enforcement column.
+ * `disabled` ⇒ null (deny). `active`/`trial` ⇒ the expiry, or the perpetual
+ * sentinel when there is none. A past timestamp is returned as-is — the
+ * Directus permission filter (`_gt $NOW`) denies it without a scheduler.
+ */
+export function entitledUntil(
+  status: EntitlementStatus,
+  expiresAt: string | null,
+): string | null {
+  if (status === 'disabled') return null;
+  return expiresAt ?? PERPETUAL_SENTINEL;
+}
