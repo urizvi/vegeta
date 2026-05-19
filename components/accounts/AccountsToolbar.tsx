@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useCategoricalFields } from '@/hooks/useTerritoryStore';
 import WorkspaceSwitcher from '@/components/WorkspaceSwitcher';
 import { useEntityNoun } from '@/hooks/useEntityNoun';
-import { useModuleEnabled } from '@/hooks/useModuleEnabled';
+import { useNavModules } from '@/hooks/useNavModules';
 
 type ViewMode = 'table' | 'kanban';
 
@@ -41,8 +41,7 @@ export default function AccountsToolbar({
   const categoricalFields = useCategoricalFields();
   const entitySingular = useEntityNoun('singular');
   const entityPlural = useEntityNoun('plural');
-  const territoryEnabled = useModuleEnabled('territory');
-  const tasksEnabled     = useModuleEnabled('tasks');
+  const navModules = useNavModules();
   const activeCount = Object.values(filters).filter(Boolean).length;
 
   return (
@@ -70,13 +69,12 @@ export default function AccountsToolbar({
         <WorkspaceSwitcher />
 
         <nav className="ml-1 flex items-center gap-0.5 rounded-[10px] border border-hairline bg-sunken/70 p-0.5">
-          {territoryEnabled && (
-            <Link href="/territory" className={navLink}>Territory</Link>
-          )}
+          {navModules.map((m) => (
+            <Link key={m.key} href={m.navHref} className={navLink}>{m.navLabel}</Link>
+          ))}
           <span className={navActive}>{entityPlural}</span>
-          <Link href="/teams" className={navLink}>Teams</Link>
-          {tasksEnabled && (
-            <Link href="/tasks" className={navLink}>Tasks</Link>
+          {navModules.some((m) => m.key === 'territory') && (
+            <Link href="/teams" className={navLink}>Teams</Link>
           )}
         </nav>
 

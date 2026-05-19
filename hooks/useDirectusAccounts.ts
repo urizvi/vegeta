@@ -16,6 +16,9 @@ import {
 } from '@/lib/directus';
 import { useAuth } from '@/hooks/useAuth';
 import { useCurrentWorkspaceId } from '@/hooks/useCurrentWorkspaceId';
+import { useEntitlements } from '@/hooks/useEntitlements';
+import { shouldFetch } from '@/lib/hydrationPlan';
+import { getEntitlementSnapshot } from '@/lib/entitlementsClient';
 
 interface State {
   status: 'idle' | 'loading' | 'ready' | 'error' | 'unauthenticated';
@@ -31,11 +34,13 @@ interface State {
 export function useDirectusAccounts(): State {
   const { status: authStatus } = useAuth();
   const workspaceId = useCurrentWorkspaceId();
+  const { tasks: tasksEntitled, territory: territoryEntitled } = useEntitlements();
   const [fetchState, setFetchState] = useState<State>({ status: 'loading', error: null });
 
   useEffect(() => {
     if (authStatus !== 'authenticated') return;
     if (!workspaceId) return; // Wait for the workspace resolver to settle.
+    const ents = getEntitlementSnapshot(workspaceId);
     let cancelled = false;
     (async () => {
       try {
@@ -46,7 +51,7 @@ export function useDirectusAccounts(): State {
           // Geo is a newer collection; tolerate missing read permission so the
           // rest of the app still loads. Run scripts/bootstrap-directus.mjs to
           // grant access, then reload.
-          getGeoNodes().catch((err: unknown) => {
+          (shouldFetch('geo_nodes', ents) ? getGeoNodes() : Promise.resolve({ nodes: [], order: [] })).catch((err: unknown) => {
             console.warn(
               '[directus] getGeoNodes failed — falling back to empty Geo tree. ' +
               'Re-run scripts/bootstrap-directus.mjs to grant geo_nodes permissions.',
@@ -54,7 +59,7 @@ export function useDirectusAccounts(): State {
             );
             return { nodes: [], order: [] };
           }),
-          getTeams().catch((err: unknown) => {
+          (shouldFetch('teams', ents) ? getTeams() : Promise.resolve({ teams: [], order: [] })).catch((err: unknown) => {
             console.warn(
               '[directus] getTeams failed — falling back to empty teams list. ' +
               'Re-run scripts/bootstrap-directus.mjs to create the teams collection.',
@@ -62,7 +67,7 @@ export function useDirectusAccounts(): State {
             );
             return { teams: [], order: [] };
           }),
-          getHierarchyLevels().catch((err: unknown) => {
+          (shouldFetch('hierarchy_levels', ents) ? getHierarchyLevels() : Promise.resolve({ levels: [], order: [] })).catch((err: unknown) => {
             console.warn(
               '[directus] getHierarchyLevels failed — falling back to empty level set. ' +
               'Re-run scripts/bootstrap-directus.mjs to create the hierarchy_levels collection.',
@@ -96,7 +101,7 @@ export function useDirectusAccounts(): State {
             );
             return [];
           }),
-          getTasks().catch((err: unknown) => {
+          (shouldFetch('tasks', ents) ? getTasks() : Promise.resolve([])).catch((err: unknown) => {
             console.warn(
               '[directus] getTasks failed — falling back to empty tasks list. ' +
               'Re-run scripts/bootstrap-directus.mjs to create the tasks collection.',
@@ -133,7 +138,7 @@ export function useDirectusAccounts(): State {
       }
     })();
     return () => { cancelled = true; };
-  }, [authStatus, workspaceId]);
+  }, [authStatus, workspaceId, tasksEntitled, territoryEntitled]);
 
   if (authStatus === 'unauthenticated') return { status: 'unauthenticated', error: null };
   if (authStatus === 'loading') return { status: 'loading', error: null };

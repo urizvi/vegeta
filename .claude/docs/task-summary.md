@@ -2013,3 +2013,50 @@ module manifests + ESLint boundary rules (no physical relocation yet); member
 directory moves Core-side to break Tasks→Territory coupling. Server-authoritative
 Directus access policies + route gate + conditional hydration. Self-serve billing
 deferred to a future spec. Spec: docs/superpowers/specs/2026-05-17-sellable-modules-entitlements-design.md
+
+## Sellable modules — implementation shipped (2026-05-18)
+
+**Spec + plan:** `docs/superpowers/specs/2026-05-17-sellable-modules-entitlements-design.md` / `.claude/docs/plans/2026-05-17-sellable-modules-plan.md`
+
+### What was built
+
+**Server-authoritative entitlements.** New `workspace_entitlements` Directus collection (`workspace_id`, `module`, `status`, `expires_at`). Directus access policies enforce **default-deny** read filters so a workspace without the `tasks` entitlement gets zero rows from `tasks`, and one without `territory` gets zero rows from `geo_nodes`, `teams`, `regions`, `subregions`, `assignments`, `hierarchy_levels`. Bootstrapped idempotently in `scripts/bootstrap-directus.mjs`. Accounts is the required base (always entitled); Tasks and Territory&Team are gated add-ons.
+
+**Entitlement resolution + client.** Pure resolver in `lib/entitlements.ts` (treats `active` and non-expired `trial` as entitled). `lib/entitlementsClient.ts` fetches the current workspace's rows with the same Directus-client + in-memory cache pattern as `lib/workspace.ts`. `hooks/useEntitlements.ts` wraps the client in React state.
+
+**Module manifests.** `modules/manifest.ts` declares each add-on's entitlement key, routes, nav entries, slice list, and `hydrate()` hint. The app shell reads manifests; no ad-hoc module knowledge is hardcoded.
+
+**Route gate + upgrade page.** `components/ModuleGate.tsx` checks entitlement on mount and redirects unentitled visitors to `/upgrade`. Mounted at `app/tasks/page.tsx`, `app/territory/page.tsx`, and `app/teams/page.tsx`. `/upgrade` is a static informational page.
+
+**Conditional hydration.** `lib/hydrationPlan.ts` + `hooks/useDirectusAccounts.ts` gate Directus fetches behind entitlement checks; unentitled slices never hydrate.
+
+**Entitlement-aware nav.** `hooks/useNavModules.ts` exposes `visibleModules()` — a module renders iff **entitled AND `modulesEnabled`**. `modulesEnabled` demoted to display-only (within-plan show/hide preference); it never grants access. Wired into 4 toolbars: `AccountsToolbar`, `TasksApp`, `Toolbar` (territory), `TeamsAdminView`.
+
+**Seam correction — membersSlice as Core.** ESLint boundary rules in `eslint.config.mjs` classify `membersSlice` as Core (not Territory), so a Tasks→members import is Tasks→Core (allowed) rather than Tasks→Territory (forbidden). Tasks ⊥ Territory is fully enforced in CI (`test/eslint-boundaries.test.ts`).
+
+**Account-detail Tasks tab.** Extracted to `components/tasks/AccountTasksTab.tsx` and mounted lazily behind the tasks entitlement in the account detail view, completing the seam fix for account-scoped task display.
+
+**Owner-only admin toggle.** `lib/entitlementsAdmin.ts` + owner-gated UI in `/settings/workspace` (WorkspaceSettingsForm) lets an owner flip modules and set a trial `expires_at`. No payment provider.
+
+**Tests.** 9 test files, 44 tests — all green. Includes ESLint boundary enforcement test, entitlement resolver edge cases, ModuleGate redirect, hydration plan, nav-module visibility, and admin grant/revoke logic.
+
+### Known limitations / follow-ups
+
+1. `hierarchy_levels` is Territory-gated, so a tasks-entitled / territory-unentitled workspace shows blank member-level labels — spec-defined ownership; flagged for product review.
+2. Owner admin form does NOT prefill current entitlement values — intentional YAGNI deferral.
+3. Account-detail Tasks tab no longer shows a count badge and requires the tasks entitlement.
+4. **Directus deploy caveat (existing instances):** `workspace_entitlements.workspace_id → workspaces` relation's `one_field` is NOT auto-updated by the idempotent bootstrap (`tryCreate` skips existing) — requires a manual relation-meta PATCH (`meta.one_field: 'workspace_entitlements'`) or a full recreate. Fresh bootstraps are correct. Manual verification checklist in `scripts/bootstrap-directus.mjs`.
+5. Self-serve billing (Stripe/checkout/webhooks) explicitly out of scope — future spec.
+
+Final cross-cutting review (2026-05-18) — READY TO MERGE, no critical/important
+issues. Three minor non-blocking follow-ups recorded:
+6. Transient entitlement-fetch failure caches `DENY_ALL` with no TTL/retry, so
+   a network blip can lock out an *entitled* user until reload (fail-safe
+   direction, UX only). Consider not caching error results or a short TTL.
+7. `ModuleGate` gates on entitlement only — a workspace entitled-to-X but with
+   `modules_enabled.X = false` hides the nav link yet `/X` stays directly
+   reachable and hydrates. Consistent with spec (entitlement = security
+   boundary; modulesEnabled = visibility), recorded as a conscious decision.
+8. Cosmetic: `/teams` shows a Territory nav link while on Teams (both are the
+   territory module); other toolbars exclude the current section. No
+   correctness/access impact.

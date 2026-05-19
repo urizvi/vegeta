@@ -1,19 +1,21 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useShallow } from 'zustand/react/shallow';
 import { useTerritoryStore } from '@/store/territoryStore';
 import { useEntityNoun } from '@/hooks/useEntityNoun';
 import { useModuleEnabled } from '@/hooks/useModuleEnabled';
+import { useModuleEntitled } from '@/hooks/useEntitlements';
 import { useContactsForAccount } from '@/store/slices/contactsSelectors';
 import { useActivitiesForAccount } from '@/store/slices/activitiesSelectors';
-import { useTasksForAccount } from '@/store/slices/tasksSelectors';
 import AddEditAccountModal from '../AddEditAccountModal';
 import OverviewTab from './OverviewTab';
 import ContactsTab from './ContactsTab';
 import ActivityTab from './ActivityTab';
-import TasksTab from './TasksTab';
+
+const AccountTasksTab = dynamic(() => import('@/components/tasks/AccountTasksTab'), { ssr: false });
 
 type TabId = 'overview' | 'contacts' | 'activity' | 'tasks';
 
@@ -29,11 +31,11 @@ export default function AccountDetail({ accountId }: { accountId: string }) {
   const contactsOn   = useModuleEnabled('contacts');
   const activitiesOn = useModuleEnabled('activities');
   const tasksOn      = useModuleEnabled('tasks');
+  const tasksEntitled = useModuleEntitled('tasks');
   const entityPlural = useEntityNoun('plural');
 
   const contacts   = useContactsForAccount(accountId);
   const activities = useActivitiesForAccount(accountId);
-  const tasks      = useTasksForAccount(accountId);
 
   const [tab, setTab] = useState<TabId>('overview');
   const [editing, setEditing] = useState(false);
@@ -44,9 +46,9 @@ export default function AccountDetail({ accountId }: { accountId: string }) {
     ];
     if (contactsOn)   out.push({ id: 'contacts', label: 'Contacts', count: contacts.length });
     if (activitiesOn) out.push({ id: 'activity', label: 'Activity', count: activities.length });
-    if (tasksOn)      out.push({ id: 'tasks',    label: 'Tasks',    count: tasks.length });
+    if (tasksOn && tasksEntitled) out.push({ id: 'tasks', label: 'Tasks' });
     return out;
-  }, [contactsOn, activitiesOn, tasksOn, contacts.length, activities.length, tasks.length]);
+  }, [contactsOn, activitiesOn, tasksOn, tasksEntitled, contacts.length, activities.length]);
 
   if (!account) {
     return (
@@ -133,7 +135,7 @@ export default function AccountDetail({ accountId }: { accountId: string }) {
           <ContactsTab accountId={accountId} fieldDefs={fieldDefs} />
         )}
         {tab === 'activity' && activitiesOn && <ActivityTab accountId={accountId} />}
-        {tab === 'tasks' && tasksOn && <TasksTab accountId={accountId} />}
+        {tab === 'tasks' && tasksOn && tasksEntitled && <AccountTasksTab accountId={accountId} />}
       </main>
 
       {editing && (

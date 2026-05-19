@@ -16,7 +16,7 @@ import { MAP_THEMES } from '@/lib/mapThemes';
 import type { MapThemeId } from '@/lib/mapThemes';
 import WorkspaceSwitcher from '@/components/WorkspaceSwitcher';
 import { useEntityNoun } from '@/hooks/useEntityNoun';
-import { useModuleEnabled } from '@/hooks/useModuleEnabled';
+import { useNavModules } from '@/hooks/useNavModules';
 import { MapHelpPopover } from '@/components/territory/map/MapHelpPopover';
 import { isEditableTarget } from '@/lib/isEditableTarget';
 
@@ -52,7 +52,7 @@ export default function Toolbar({ drillDownCountryName }: ToolbarProps) {
   const canUndo       = useCanUndoGeo();
   const canRedo       = useCanRedoGeo();
   const entityPlural  = useEntityNoun('plural');
-  const tasksEnabled  = useModuleEnabled('tasks');
+  const navModules    = useNavModules();
   const {
     setActiveView, setDrillDownCountryCode, setMapTheme,
     toggleShowAccounts, setMapAccountMetric, setActivePaintGeo, setActiveEraser, setActiveSelect,
@@ -171,8 +171,9 @@ export default function Toolbar({ drillDownCountryName }: ToolbarProps) {
       <nav className="ml-1 flex items-center gap-0.5 rounded-[10px] border border-hairline bg-sunken/70 p-0.5">
         <span className={navActive}>Territory</span>
         <Link href="/accounts" className={navLink}>{entityPlural}</Link>
-        <Link href="/teams" className={navLink}>Teams</Link>
-        {tasksEnabled && <Link href="/tasks" className={navLink}>Tasks</Link>}
+        {navModules.filter((m) => m.key !== 'territory').map((m) => (
+          <Link key={m.key} href={m.navHref} className={navLink}>{m.navLabel}</Link>
+        ))}
       </nav>
 
       {/* Breadcrumb */}
