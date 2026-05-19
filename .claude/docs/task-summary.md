@@ -2060,3 +2060,54 @@ issues. Three minor non-blocking follow-ups recorded:
 8. Cosmetic: `/teams` shows a Territory nav link while on Teams (both are the
    territory module); other toolbars exclude the current section. No
    correctness/access impact.
+
+**Superseded:** the server-side entitlement enforcement mechanism described above was found incompatible with Directus 11 and was redesigned — see "Directus-11 entitlement enforcement redesign" below.
+
+## Directus-11 entitlement enforcement redesign — shipped + acceptance-tested (2026-05-18)
+
+**Spec + plan:** `docs/superpowers/specs/2026-05-18-entitlement-enforcement-directus11-design.md` / `docs/superpowers/plans/2026-05-18-entitlement-enforcement-directus11.md`
+
+### What was redesigned
+
+The prior implementation used a **relational M2O filter** (`workspace_entitlements.status _eq active`) which Directus 11 does not support in permission rules — it silently ignored the filter and granted full access regardless of entitlement state. The redesign replaces that with a **mirror-column pattern**:
+
+- **Mirror columns** (`tasks_entitled_until`, `territory_entitled_until`) added to `workspaces` table. Each holds a `datetime` value: `9999-12-31T00:00:00.000Z` when the add-on is active with no expiry, the actual expiry timestamp for a trial, or `null` = disabled.
+- **Directus permission rule** for each gated collection uses `_gt $NOW` on the mirror column via the workspace M2O join — a scalar date comparison that Directus 11 evaluates correctly.
+- **`setEntitlement` second write** in `lib/entitlementsAdmin.ts` writes the mirror value atomically with every entitlement status change.
+- **Bootstrap `ensureMirrorColumns`** (T3) adds `tasks_entitled_until` and `territory_entitled_until` to `workspaces` if absent; `setPermission` (T4/T5) is now idempotent — deletes all prior rules for a role+collection+action before inserting one, eliminating duplicate-rule accumulation.
+- **`recomputeWorkspaceMirrors`** (T6) recomputes mirrors from `workspace_entitlements` for all workspaces at bootstrap time, so existing data is corrected even if `setEntitlement` was not called.
+
+### Known limitation / caveat
+
+Direct Directus-admin edits to `workspace_entitlements` (e.g. via the Directus admin UI or raw API outside the app) do **not** automatically propagate to the mirror columns. To re-sync, run `node scripts/bootstrap-directus.mjs` (which triggers the recompute pass) or use the owner-settings panel in the app (which calls `setEntitlement` and performs the mirror write).
+
+### Prior known-limitation RESOLVED
+
+The Directus-11 relational-permission-filter incompatibility — the O2M-nested add-on read filter returning HTTP 500/400 on Directus 11.3.5, discovered during post-merge live deny-path testing and NOT previously a numbered limitation — is now resolved by the mirror-column + `_gt $NOW` approach described above. Spec + plan: `docs/superpowers/specs/2026-05-18-entitlement-enforcement-directus11-design.md` / `docs/superpowers/plans/2026-05-18-entitlement-enforcement-directus11.md`.
+
+### Live acceptance results (Step 4 deny-path matrix, 2026-05-18)
+
+Against Directus 11.3.5 at http://localhost:8055, workspace Default (cdeaa9ff-0beb-4306-9bce-7648341c707b), viewer-test@example.com:
+
+```
+-- territory+tasks ACTIVE --
+geo_nodes: HTTP 200 rows=8
+teams: HTTP 200 rows=6
+hierarchy_levels: HTTP 200 rows=5
+tasks: HTTP 200 rows=1
+accounts: HTTP 200 rows=6
+-- territory DISABLED --
+geo_nodes: HTTP 200 rows=0
+teams: HTTP 200 rows=0
+hierarchy_levels: HTTP 200 rows=0
+-- territory TRIAL future --
+geo_nodes: HTTP 200 rows=8
+-- territory TRIAL past --
+geo_nodes: HTTP 200 rows=0
+-- restore territory ACTIVE --
+geo_nodes: HTTP 200 rows=8
+```
+
+All checks passed: active → rows>0, disabled → rows=0 (not 500), trial future → rows>0, trial past → rows=0, restore → rows>0. Admin unaffected (all 200). Idempotency confirmed (re-run → still exactly 1 rule per add-on read collection). Default workspace restored to territory+tasks active (both `*_entitled_until = 9999-12-31T00:00:00.000Z`).
+
+tasks gating confirmed active/disabled; trial future/past paths exercised via territory (same filter mechanism).
