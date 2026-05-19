@@ -1,6 +1,6 @@
 'use client';
 
-import type { EntitlementStatus, ModuleKey } from './entitlements';
+import { entitledUntil, type EntitlementStatus, type ModuleKey } from './entitlements';
 import { invalidateEntitlements } from './entitlementsClient';
 
 export interface EntitlementPatch {
@@ -61,5 +61,21 @@ export async function setEntitlement(patch: EntitlementPatch): Promise<void> {
         body: JSON.stringify(patch),
       });
   if (!res.ok) throw new Error(`save entitlement failed: ${res.status}`);
+
+  // Project onto the denormalized enforcement column the Directus add-on
+  // read permission filters on (`workspaces.<module>_entitled_until _gt $NOW`).
+  // Written AFTER the source-of-truth row; mirrors lib/entitlements.entitledUntil.
+  const mirror = await fetch(
+    `${base}/items/workspaces/${encodeURIComponent(patch.workspace_id)}`,
+    {
+      method: 'PATCH',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        [`${patch.module}_entitled_until`]: entitledUntil(patch.status, patch.expires_at),
+      }),
+    },
+  );
+  if (!mirror.ok) throw new Error(`mirror entitlement failed: ${mirror.status}`);
   invalidateEntitlements(patch.workspace_id);
 }
