@@ -917,18 +917,22 @@ async function ensurePermission(token, policyId, collection, action, opts = {}) 
       body.permissions = { workspace_id: { _eq: '$CURRENT_USER.current_workspace' } };
     }
   }
+  // Idempotent: collapse to exactly one rule per (policy, collection, action).
+  // Historical bootstrap runs accumulated duplicate rows (including
+  // unrestricted `{}` reads that nullified the gate AND workspace isolation);
+  // delete all then write one canonical rule.
+  // A mid-loop failure leaves fewer duplicates and no canonical rule; a re-run converges (the same accepted brief zero-rule window).
   const existing = await api(
     token,
     'GET',
-    `/permissions?filter[policy][_eq]=${policyId}&filter[collection][_eq]=${encodeURIComponent(collection)}&filter[action][_eq]=${action}&limit=1`,
+    `/permissions?filter[policy][_eq]=${policyId}&filter[collection][_eq]=${encodeURIComponent(collection)}&filter[action][_eq]=${action}&fields=id&limit=-1`,
   );
-  if (existing?.[0]) {
-    await api(token, 'PATCH', `/permissions/${existing[0].id}`, body);
-    console.log(`  ✓ updated ${label}`);
-  } else {
-    await api(token, 'POST', '/permissions', body);
-    console.log(`  ✓ created ${label}`);
+  for (const row of existing ?? []) {
+    await api(token, 'DELETE', `/permissions/${row.id}`);
   }
+  await api(token, 'POST', '/permissions', body);
+  const removed = (existing ?? []).length;
+  console.log(`  ✓ set ${label}${removed ? ` (removed ${removed} prior rule(s))` : ''}`);
 }
 
 // Workspace-scoped collections: every read/update/delete is filtered to the
