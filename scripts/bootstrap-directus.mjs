@@ -68,6 +68,11 @@ async function tryCreateField(token, collection, fieldDef) {
 
 // ── Collections ───────────────────────────────────────────────────────────
 
+const ENTITLEMENT_MIRROR_NOTE = {
+  tasks_entitled_until:     'Enforcement mirror: tasks entitled until this instant (null = denied). Derived from workspace_entitlements.',
+  territory_entitled_until: 'Enforcement mirror: territory entitled until this instant (null = denied). Derived from workspace_entitlements.',
+};
+
 const WORKSPACES_COLLECTION = {
   collection: 'workspaces',
   meta: { icon: 'workspaces_outline', note: 'Tenants — each workspace owns its own accounts/teams/geos/etc.', sort_field: 'sort' },
@@ -90,6 +95,16 @@ const WORKSPACES_COLLECTION = {
       field: 'created_at',
       type: 'timestamp',
       meta: { interface: 'datetime', readonly: true, special: ['date-created'] },
+    },
+    {
+      field: 'tasks_entitled_until',
+      type: 'timestamp',
+      meta: { interface: 'datetime', note: ENTITLEMENT_MIRROR_NOTE.tasks_entitled_until },
+    },
+    {
+      field: 'territory_entitled_until',
+      type: 'timestamp',
+      meta: { interface: 'datetime', note: ENTITLEMENT_MIRROR_NOTE.territory_entitled_until },
     },
   ],
 };
@@ -1435,6 +1450,18 @@ async function main() {
     });
     defaultWorkspaceId = created.id;
     console.log(`  ✓ created Default workspace (${defaultWorkspaceId})`);
+  }
+
+  // Enforcement mirror columns (idempotent for already-existing instances).
+  // The Directus-11 add-on read permission filter gates on
+  // workspaces.<module>_entitled_until _gt $NOW (see ensurePermission).
+  console.log('→ Ensuring workspace entitlement mirror columns');
+  for (const field of ['tasks_entitled_until', 'territory_entitled_until']) {
+    await tryCreateField(token, 'workspaces', {
+      field,
+      type: 'timestamp',
+      meta: { interface: 'datetime', note: ENTITLEMENT_MIRROR_NOTE[field] },
+    });
   }
 
   // ── Phase 1.1b — workspace_id on every existing collection + backfill ──
