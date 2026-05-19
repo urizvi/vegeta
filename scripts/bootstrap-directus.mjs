@@ -878,27 +878,18 @@ async function ensurePermission(token, policyId, collection, action, opts = {}) 
       body.validation = wsFilter;
       body.presets = { workspace_id: '$CURRENT_USER.current_workspace' };
     } else if (opts.entitlementModule) {
-      // Combine workspace scope with entitlement check via _and.
-      // Requires a non-expired, non-disabled workspace_entitlements row for
-      // the owning module.  The relational filter traverses the
-      // workspace_entitlements collection via the shared workspace_id field.
+      // Directus-11-valid gate: traverse the M2O workspace_id to the scalar
+      // enforcement mirror column workspaces.<module>_entitled_until and
+      // require it to be strictly after $NOW. null (disabled/none) fails
+      // _gt → deny. Perpetual = far-future sentinel. Trial expiry self-
+      // enforces at query time (no scheduler). The mirror is kept in sync by
+      // lib/entitlementsAdmin.setEntitlement + the recompute pass below.
       body.permissions = {
         _and: [
           wsFilter,
           {
             workspace_id: {
-              workspace_entitlements: {
-                _and: [
-                  { module:  { _eq: opts.entitlementModule } },
-                  { status:  { _neq: 'disabled' } },
-                  {
-                    _or: [
-                      { expires_at: { _null: true } },
-                      { expires_at: { _gt: '$NOW' } },
-                    ],
-                  },
-                ],
-              },
+              [`${opts.entitlementModule}_entitled_until`]: { _gt: '$NOW' },
             },
           },
         ],
