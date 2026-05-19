@@ -1382,6 +1382,20 @@ async function main() {
     schema: { on_delete: 'SET NULL' },
   }, 'directus_users.current_workspace → workspaces');
 
+  // Enforcement mirror columns (idempotent for already-existing instances).
+  // The Directus-11 add-on read permission filter gates on
+  // workspaces.<module>_entitled_until _gt $NOW (see ensurePermission).
+  // Must run BEFORE the ROLE_DEFS loop so the columns exist when
+  // grantPolicyPermissions writes the filter that references them.
+  console.log('→ Ensuring workspace entitlement mirror columns');
+  for (const field of ['tasks_entitled_until', 'territory_entitled_until']) {
+    await tryCreateField(token, 'workspaces', {
+      field,
+      type: 'timestamp',
+      meta: { interface: 'datetime', note: ENTITLEMENT_MIRROR_NOTE[field] },
+    });
+  }
+
   for (const def of ROLE_DEFS) {
     console.log(`→ Ensuring role + policy: ${def.name}`);
     const roleId = await ensureRole(token, def);
@@ -1407,18 +1421,6 @@ async function main() {
     });
     defaultWorkspaceId = created.id;
     console.log(`  ✓ created Default workspace (${defaultWorkspaceId})`);
-  }
-
-  // Enforcement mirror columns (idempotent for already-existing instances).
-  // The Directus-11 add-on read permission filter gates on
-  // workspaces.<module>_entitled_until _gt $NOW (see ensurePermission).
-  console.log('→ Ensuring workspace entitlement mirror columns');
-  for (const field of ['tasks_entitled_until', 'territory_entitled_until']) {
-    await tryCreateField(token, 'workspaces', {
-      field,
-      type: 'timestamp',
-      meta: { interface: 'datetime', note: ENTITLEMENT_MIRROR_NOTE[field] },
-    });
   }
 
   // ── Phase 1.1b — workspace_id on every existing collection + backfill ──
@@ -1486,9 +1488,9 @@ async function main() {
     // One entitlement row per (workspace, module) is expected (setEntitlement upserts by that key); on accidental duplicates, last row wins.
     const byModule = Object.fromEntries((rows ?? []).map((r) => [r.module, r]));
     const patch = {};
-    for (const module of ['tasks', 'territory']) {
-      const r = byModule[module];
-      patch[`${module}_entitled_until`] = r ? entUntil(r.status, r.expires_at) : null;
+    for (const mod of ['tasks', 'territory']) {
+      const r = byModule[mod];
+      patch[`${mod}_entitled_until`] = r ? entUntil(r.status, r.expires_at) : null;
     }
     await api(token, 'PATCH', `/items/workspaces/${ws.id}`, patch);
   }
