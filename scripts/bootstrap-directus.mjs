@@ -1342,63 +1342,25 @@ async function main() {
 
   // ── MANUAL VERIFICATION CHECKLIST (workspace_entitlements + default-deny) ─
   //
-  // VERIFY FIRST — before any of the steps below, confirm the O2M alias exists:
-  //   Directus Admin → Data Model → workspaces → check that a field/alias named
-  //   "workspace_entitlements" (O2M) is present.  If it is absent the
-  //   entitlement gate is silently broken — stop and re-run this script.
-  //
-  // After running this script against a fresh or existing dev Directus instance:
-  //
-  // 1. Fresh dev workspace with NO entitlement rows:
-  //      GET /items/tasks (as a non-admin app user)
-  //      Expected: { data: [] }  — zero rows returned, NOT a 403 with rows.
-  //
-  // 2. Same workspace, no entitlement rows:
-  //      GET /items/geo_nodes
-  //      Expected: { data: [] }
-  //
-  // 3. Insert an active entitlement for the tasks module:
-  //      POST /items/workspace_entitlements
-  //      { workspace_id: "<your-ws-id>", module: "tasks", status: "active", expires_at: null }
-  //
-  // 4. GET /items/tasks (same non-admin user, same workspace)
-  //    Expected: returns the workspace's actual task rows.
-  //
-  // 5. Set the entitlement row status to 'disabled':
-  //      PATCH /items/workspace_entitlements/<id>  { status: "disabled" }
-  //    GET /items/tasks → Expected: { data: [] }  (access revoked immediately)
-  //
-  // 6. Core collection is NEVER gated by entitlements:
-  //      GET /items/accounts  (in ALL above states)
-  //      Expected: returns rows in all states — accounts are always accessible.
-  //
-  // 7. Re-run `node scripts/bootstrap-directus.mjs`:
-  //    Expected console output for workspace_entitlements collection:
-  //      "⟳ workspace_entitlements already exists — skipping"
-  //    Each add-on collection (tasks, geo_nodes, teams, hierarchy_levels)
-  //    shows "✓ updated permission: read <collection>" — NOT a second create.
-  //    Query GET /permissions filtered to the non-admin policy → each
-  //    add-on collection has exactly ONE read permission row (no duplicates).
-  //
-  // 8. Trial-expiry — expired trial DENIES (exercises $NOW branch):
-  //      POST /items/workspace_entitlements
-  //      { workspace_id: "<ws-id>", module: "territory", status: "trial",
-  //        expires_at: "<ISO timestamp 1 hour in the PAST>" }
-  //    GET /items/geo_nodes       → Expected: { data: [] }
-  //    GET /items/teams           → Expected: { data: [] }
-  //    GET /items/hierarchy_levels → Expected: { data: [] }
-  //
-  // 9. Trial-expiry — future trial GRANTS:
-  //      PATCH /items/workspace_entitlements/<id>
-  //      { expires_at: "<ISO timestamp 1 hour in the FUTURE>" }
-  //    GET /items/geo_nodes       → Expected: returns rows
-  //    GET /items/teams           → Expected: returns rows
-  //    GET /items/hierarchy_levels → Expected: returns rows
-  //
-  // 10. Write-not-gated — entitlement gate is READ-only; writes are not blocked:
-  //     Using a non-admin user whose tasks entitlement is disabled (or absent):
-  //       POST /items/tasks  { workspace_id: "<ws-id>", ... }
-  //       Expected: 200 / created item — write succeeds even without entitlement.
+  //  ENTITLEMENT ENFORCEMENT — manual verification (Directus 11)
+  //  Prereq: a non-admin user (e.g. viewer-test@example.com) whose
+  //  current_workspace = the target workspace.
+  //  1. After bootstrap, in Directus Admin → Data Model → workspaces, confirm
+  //     columns tasks_entitled_until and territory_entitled_until exist.
+  //  2. As the non-admin user with territory active:
+  //     GET /items/geo_nodes, /items/teams, /items/hierarchy_levels → 200 w/ rows.
+  //  3. Set the workspace's territory entitlement disabled via the owner panel
+  //     (or PATCH workspace_entitlements then re-run bootstrap), then repeat (2)
+  //     → HTTP 200 with data: [] (NOT 500, NOT other-workspace rows).
+  //  4. tasks parity: toggle tasks entitlement, GET /items/tasks → 200 rows ↔ 200 [].
+  //  5. Trial: set territory trial with expires_at in the FUTURE → reads allowed;
+  //     set it in the PAST → reads denied (no scheduler involved).
+  //  6. Core isolation: GET /items/accounts as the non-admin → exactly the
+  //     workspace's own rows; in Directus Admin → Policies, each
+  //     policy+collection+action has exactly ONE permission rule (no {} dupes).
+  //  7. Idempotency: run `node scripts/bootstrap-directus.mjs` twice → still
+  //     one rule per policy+collection+action; mirror columns unchanged.
+  //  8. Admin (admin@example.com) is unaffected (bypasses policies).
   // ─────────────────────────────────────────────────────────────────────────
 
   console.log('→ Ensuring directus_users.current_workspace field');
@@ -1504,6 +1466,33 @@ async function main() {
   // invoked from app-side onboarding (createWorkspace) — the app code
   // duplicates the data shape but keeps the same behavior.
   await seedWorkspaceDefaults(token, defaultWorkspaceId, { template: 'sales' });
+
+  // ── Recompute entitlement mirror columns from the source of truth ──
+  // workspaces.<module>_entitled_until is what the add-on read permission
+  // filter gates on. This repairs drift / first rollout / direct-DB edits.
+  // Projection MUST match lib/entitlements.ts:entitledUntil:
+  //   disabled → null ; active|trial → expires_at ?? sentinel ; absent row → null
+  const PERPETUAL = '9999-12-31T00:00:00.000Z';
+  const entUntil = (status, expiresAt) =>
+    status === 'disabled' ? null : (expiresAt ?? PERPETUAL);
+  console.log('→ Recomputing workspace entitlement mirror columns');
+  const allWorkspaces = await api(token, 'GET', '/items/workspaces?fields=id&limit=-1');
+  for (const ws of allWorkspaces ?? []) {
+    const rows = await api(
+      token,
+      'GET',
+      `/items/workspace_entitlements?filter[workspace_id][_eq]=${ws.id}&fields=module,status,expires_at&limit=-1`,
+    );
+    // One entitlement row per (workspace, module) is expected (setEntitlement upserts by that key); on accidental duplicates, last row wins.
+    const byModule = Object.fromEntries((rows ?? []).map((r) => [r.module, r]));
+    const patch = {};
+    for (const module of ['tasks', 'territory']) {
+      const r = byModule[module];
+      patch[`${module}_entitled_until`] = r ? entUntil(r.status, r.expires_at) : null;
+    }
+    await api(token, 'PATCH', `/items/workspaces/${ws.id}`, patch);
+  }
+  console.log(`  ✓ recomputed mirrors for ${(allWorkspaces ?? []).length} workspace(s)`);
 
   // Backfill workspace_members: every existing Directus user gets a member
   // row in Default so they don't lose visibility after the workspace_members-
