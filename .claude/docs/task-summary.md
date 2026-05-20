@@ -2111,3 +2111,25 @@ geo_nodes: HTTP 200 rows=8
 All checks passed: active → rows>0, disabled → rows=0 (not 500), trial future → rows>0, trial past → rows=0, restore → rows>0. Admin unaffected (all 200). Idempotency confirmed (re-run → still exactly 1 rule per add-on read collection). Default workspace restored to territory+tasks active (both `*_entitled_until = 9999-12-31T00:00:00.000Z`).
 
 tasks gating confirmed active/disabled; trial future/past paths exercised via territory (same filter mechanism).
+
+---
+
+## 2026-05-19 — Computed/formula fields design (CRM evolution sub-project A)
+
+Brainstormed and specced the first sub-project in the CRM-primitives phase: **computed fields** for the Accounts module. Spec lives at `docs/superpowers/specs/2026-05-19-computed-fields-design.md`. No code changes yet.
+
+Key decisions locked during brainstorm:
+
+- **Scope:** Accounts only; computed = fourth field type alongside categorical/metric/text. Decomposed the broader "true CRM" ask into sub-projects A (computed fields, this) → B (field-type/schema upgrades) → C (contacts first-class) → D (activities timeline) → E (saved views/bulk actions) → F (audit log) → G (automation). Order is a recommendation, not a commitment.
+- **Expressiveness — Tier 2:** arithmetic (`+ − × ÷`) + comparison + `IF` + `AND/OR/NOT`. Output types: `number | text | boolean`. No function library yet (deferred to Tier 3).
+- **Builder UX — two-mode:** Simple form (three shapes: arithmetic combinator / bucket-tier / boolean flag) with fall-through to Advanced text editor (field autocomplete on `{`, inline error markers, debounced live preview). Both modes round-trip through a shared canonical AST; "too complex for Simple" banner is the explicit escape hatch.
+- **Evaluation — hybrid:** single pure evaluator at `lib/formula/evaluate.ts` called from both (a) editor live preview and (b) materialization into `account.fields` on write. Sortable/filterable for free because values live in the same map.
+- **Field refs by `id`, not label** — non-negotiable. Renames are no-ops; deletions surface as `MISSING_FIELD` with a red dot in Manage Fields.
+- **`outputType` locked after first save**, with explicit "Convert output type…" destructive action that clears the formula and runs workspace backfill. Avoids mixed-type intermediate states.
+- **Errors render `—`** with hover tooltip explaining why; not persisted. Save-time validation blocks parse errors, cycles, type mismatches, output-type mismatch, incomplete Simple rows.
+- **Surface integration:** read-only preview in Add/Edit modal · sortable+filterable table columns (text outputs derive distinct-values from observed data, no declared enum) · Kanban grouping only for text outputs with ≤~12 observed values and drag-to-move disabled · excluded from CSV import target dropdown · included in CSV export with `ƒ ` prefix on the header.
+- **Boolean rendering:** `✓` true / `✗` false / `—` missing-or-error (distinct from each other).
+- **Performance:** target <1ms per eval, no memoization initially; workspace backfill batched into the existing store write path.
+- **Testing:** layers 1 (`lib/formula/*` units) and 2 (store integration) land with the feature; layer 3 (FormulaEditor component tests) introduces the UI-test pattern or defers.
+
+Next: write the implementation plan once the user has reviewed and approved the spec.
