@@ -8,6 +8,9 @@ import { useEntityNoun } from '@/hooks/useEntityNoun';
 import { useOwnerNoun } from '@/hooks/useOwnerNoun';
 import { useModuleEnabled } from '@/hooks/useModuleEnabled';
 import type { Account } from '@/types/account';
+import { evaluate } from '@/lib/formula/evaluate';
+import { formatFieldValue } from '@/lib/accountFields';
+import type { FieldDefinition } from '@/lib/accountFields';
 import GeoPicker from './GeoPicker';
 
 interface FormState {
@@ -16,7 +19,7 @@ interface FormState {
   state?: string;
   geoNodeId: string | null;
   repId: string | null;
-  fields: Record<string, string | number>;
+  fields: Record<string, string | number | boolean>;
 }
 
 interface Props {
@@ -51,7 +54,7 @@ export default function AddEditAccountModal({ account, onClose }: Props) {
       };
     }
     // Build defaults from fieldDefs
-    const fields: Record<string, string | number> = {};
+    const fields: Record<string, string | number | boolean> = {};
     fieldDefs.forEach((def) => {
       if (def.type === 'metric') fields[def.id] = 0;
       else if (def.type === 'categorical' && def.options?.length) fields[def.id] = def.options[0];
@@ -125,6 +128,15 @@ export default function AddEditAccountModal({ account, onClose }: Props) {
   const categoricalFields = fieldDefs.filter((f) => f.type === 'categorical');
   const metricFields      = fieldDefs.filter((f) => f.type === 'metric');
   const textFields        = fieldDefs.filter((f) => f.type === 'text');
+  const computedFields    = fieldDefs.filter((f) => f.type === 'computed');
+
+  const draft: Pick<Account, 'fields' | 'id' | 'name' | 'repId' | 'stageId'> = {
+    id: account?.id ?? '',
+    name: form.name,
+    repId: form.repId,
+    stageId: account?.stageId ?? null,
+    fields: form.fields,
+  };
 
   return (
     <dialog
@@ -277,6 +289,18 @@ export default function AddEditAccountModal({ account, onClose }: Props) {
             </div>
           )}
 
+          {/* Computed fields (read-only preview) */}
+          {computedFields.length > 0 && (
+            <div>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Computed</p>
+              <div className="space-y-1 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-800/50">
+                {computedFields.map((def) => (
+                  <ComputedPreviewRow key={def.id} def={def} draft={draft} defs={fieldDefs} />
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Geo assignment */}
           {territoryEnabled && (
             <div>
@@ -326,5 +350,35 @@ export default function AddEditAccountModal({ account, onClose }: Props) {
         </div>
       </form>
     </dialog>
+  );
+}
+
+function ComputedPreviewRow({
+  def, draft, defs,
+}: {
+  def: FieldDefinition;
+  draft: Pick<Account, 'fields' | 'id' | 'name' | 'repId' | 'stageId'>;
+  defs: FieldDefinition[];
+}) {
+  if (!def.formula) {
+    return (
+      <div className="text-xs text-slate-400">{def.label}: (no formula)</div>
+    );
+  }
+  const previewAccount: Account = {
+    id: draft.id, name: draft.name, repId: draft.repId, stageId: draft.stageId, fields: draft.fields,
+  };
+  const r = evaluate(def.formula, previewAccount, defs);
+  const text = r.ok
+    ? formatFieldValue(r.value as string | number | boolean, def)
+    : '—';
+
+  return (
+    <div className="flex items-center gap-2 py-1">
+      <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{def.label}</span>
+      <span title="Computed field"
+        className="inline-flex h-4 w-4 items-center justify-center rounded bg-emerald-100 text-[10px] font-bold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">ƒ</span>
+      <span className="ml-auto text-sm text-slate-600 dark:text-slate-200">{text}</span>
+    </div>
   );
 }
