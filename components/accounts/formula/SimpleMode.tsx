@@ -14,7 +14,7 @@ interface Props {
   tooComplex: boolean;
 }
 
-export default function SimpleMode({ config, outputType: _outputType, defs, onChange, tooComplex }: Props) {
+export default function SimpleMode({ config, defs, onChange, tooComplex }: Props) {
   if (tooComplex) {
     return (
       <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
@@ -23,10 +23,10 @@ export default function SimpleMode({ config, outputType: _outputType, defs, onCh
     );
   }
   if (config.shape === 'arithmetic') {
-    return <ArithmeticShape config={config} defs={defs} onChange={(c: any) => onChange(c)} />;
+    return <ArithmeticShape config={config} defs={defs} onChange={(c: SimpleFormConfig) => onChange(c)} />;
   }
   if (config.shape === 'bucket') {
-    return <BucketShape config={config} defs={defs} onChange={(c: any) => onChange(c)} />;
+    return <BucketShape config={config} defs={defs} onChange={(c: SimpleFormConfig) => onChange(c)} />;
   }
-  return <FlagShape config={config} defs={defs} onChange={(c: any) => onChange(c)} />;
+  return <FlagShape config={config} defs={defs} onChange={(c: SimpleFormConfig) => onChange(c)} />;
 }

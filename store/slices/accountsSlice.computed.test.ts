@@ -20,10 +20,14 @@ vi.mock('@/lib/directus-write', () => {
 
 vi.mock('@/lib/directus', () => ({ getAccounts: vi.fn(async () => []) }));
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function makeStore() {
   let state: Partial<TerritoryStore> = {};
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const set: any = (p: any) => { state = { ...state, ...(typeof p === 'function' ? p(state) : p) }; };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const get: any = () => state;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const slice = createAccountsSlice(set, get, {} as any) as AccountsSlice;
   Object.assign(state, slice);
   return { state, set, get };
@@ -40,8 +44,11 @@ describe('accountsSlice — computed recompute', () => {
           then: { kind: 'literal', valueType: 'text', value: 'Big' },
           else: { kind: 'literal', valueType: 'text', value: 'Small' } } },
     ];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (state as any).hydrateFieldDefs(defs);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (state as any).hydrateAccounts([{ id: 'a1', name: 'Acme', repId: null, stageId: null, fields: {} }]);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (state as any).updateAccount('a1', { fields: { arr: 200 } });
     expect(get().accounts['a1'].fields.tier).toBe('Big');
   });
