@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
   DndContext,
   PointerSensor,
@@ -14,11 +14,45 @@ import {
   useActions,
   usePipelineStages,
   usePipelineStageOrder,
+  useFieldDefs,
 } from '@/hooks/useTerritoryStore';
 import type { Account } from '@/types/account';
 import type { Member, SalesTeam } from '@/types/territory';
+import type { FieldDefinition } from '@/lib/accountFields';
 
 const UNSTAGED = '__unstaged__';
+const GROUP_BY_STAGE = '__stage__';
+
+// ---------------------------------------------------------------------------
+// Eligibility helpers
+// ---------------------------------------------------------------------------
+
+function isEligibleGroupField(def: FieldDefinition, accounts: Account[]): boolean {
+  if (def.type === 'categorical') return true;
+  if (def.type === 'computed' && def.outputType === 'text') {
+    const distinct = new Set<string>();
+    for (const a of accounts) {
+      const v = a.fields[def.id];
+      if (typeof v === 'string' && v !== '') distinct.add(v);
+      if (distinct.size > 12) return false;
+    }
+    return true;
+  }
+  return false;
+}
+
+function distinctTextValues(def: FieldDefinition, accounts: Account[]): string[] {
+  const seen = new Set<string>();
+  for (const a of accounts) {
+    const v = a.fields[def.id];
+    if (typeof v === 'string' && v !== '') seen.add(v);
+  }
+  return [...seen].sort();
+}
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
 
 interface Props {
   accounts: Account[];
@@ -30,45 +64,104 @@ interface Props {
 export default function KanbanBoard({ accounts, members, teams, onEdit }: Props) {
   const stages = usePipelineStages();
   const stageOrder = usePipelineStageOrder();
+  const fieldDefs = useFieldDefs();
   const { updateAccount } = useActions();
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
-  const accountsByStage = useMemo(() => {
-    const out: Record<string, Account[]> = { [UNSTAGED]: [] };
-    for (const sid of stageOrder) out[sid] = [];
-    for (const a of accounts) {
-      const key = a.stageId && out[a.stageId] !== undefined ? a.stageId : UNSTAGED;
-      out[key].push(a);
-    }
-    return out;
-  }, [accounts, stageOrder]);
+  const [groupBy, setGroupBy] = useState<string>(GROUP_BY_STAGE);
 
+  // Fields that can appear in the Group-by dropdown
+  const eligibleGroupFields = useMemo(
+    () => fieldDefs.filter((def) => isEligibleGroupField(def, accounts)),
+    [fieldDefs, accounts],
+  );
+
+  // Is the current grouping driven by a computed field?
+  const groupByDef = useMemo(
+    () => (groupBy === GROUP_BY_STAGE ? null : fieldDefs.find((d) => d.id === groupBy) ?? null),
+    [groupBy, fieldDefs],
+  );
+  const isComputedGrouping = groupByDef?.type === 'computed';
+
+  // ---------------------------------------------------------------------------
+  // Build columns
+  // ---------------------------------------------------------------------------
+  const { columns, accountsByCol } = useMemo(() => {
+    if (groupBy === GROUP_BY_STAGE) {
+      // Pipeline-stage grouping (original behaviour)
+      const cols: Array<{ id: string; label: string; color: string }> = [
+        ...stageOrder.map((sid) => ({
+          id: sid,
+          label: stages[sid]?.label ?? sid,
+          color: stages[sid]?.color ?? '#e5e7eb',
+        })),
+        { id: UNSTAGED, label: 'Unstaged', color: '#f4f4f5' },
+      ];
+
+      const byCol: Record<string, Account[]> = { [UNSTAGED]: [] };
+      for (const sid of stageOrder) byCol[sid] = [];
+      for (const a of accounts) {
+        const key = a.stageId && byCol[a.stageId] !== undefined ? a.stageId : UNSTAGED;
+        byCol[key].push(a);
+      }
+      return { columns: cols, accountsByCol: byCol };
+    }
+
+    // Field-based grouping
+    const def = fieldDefs.find((d) => d.id === groupBy);
+    if (!def) {
+      return { columns: [], accountsByCol: {} };
+    }
+
+    const values: string[] =
+      def.type === 'computed'
+        ? distinctTextValues(def, accounts)
+        : (def.options ?? []);
+
+    const cols: Array<{ id: string; label: string; color: string }> = [
+      ...values.map((v) => ({ id: v, label: v, color: '#e5e7eb' })),
+      { id: UNSTAGED, label: '—', color: '#f4f4f5' },
+    ];
+
+    const byCol: Record<string, Account[]> = { [UNSTAGED]: [] };
+    for (const v of values) byCol[v] = [];
+    for (const a of accounts) {
+      const raw = a.fields[def.id];
+      const val = typeof raw === 'string' && raw !== '' ? raw : null;
+      const key = val && byCol[val] !== undefined ? val : UNSTAGED;
+      byCol[key].push(a);
+    }
+    return { columns: cols, accountsByCol: byCol };
+  }, [groupBy, accounts, stageOrder, stages, fieldDefs]);
+
+  // ---------------------------------------------------------------------------
+  // Drag handler
+  // ---------------------------------------------------------------------------
   function handleDragEnd(e: DragEndEvent) {
+    if (isComputedGrouping) return; // drag disabled for computed groupings
+
     const { active, over } = e;
     if (!over) return;
     const accountId = String(active.id);
     const targetStage = String(over.id);
-    if (targetStage === UNSTAGED) {
-      // Drop on the unstaged column → null out the stage.
-      updateAccount(accountId, { stageId: null });
-      return;
+
+    if (groupBy === GROUP_BY_STAGE) {
+      if (targetStage === UNSTAGED) {
+        updateAccount(accountId, { stageId: null });
+        return;
+      }
+      if (!stages[targetStage]) return;
+      const account = accounts.find((a) => a.id === accountId);
+      if (!account || account.stageId === targetStage) return;
+      updateAccount(accountId, { stageId: targetStage });
     }
-    if (!stages[targetStage]) return;
-    const account = accounts.find((a) => a.id === accountId);
-    if (!account || account.stageId === targetStage) return;
-    updateAccount(accountId, { stageId: targetStage });
+    // For categorical field grouping: drag-to-move is not implemented (would require field mutation)
   }
 
-  const columns: Array<{ id: string; label: string; color: string }> = [
-    ...stageOrder.map((sid) => ({
-      id: sid,
-      label: stages[sid]?.label ?? sid,
-      color: stages[sid]?.color ?? '#e5e7eb',
-    })),
-    { id: UNSTAGED, label: 'Unstaged', color: '#f4f4f5' },
-  ];
-
-  if (stageOrder.length === 0) {
+  // ---------------------------------------------------------------------------
+  // Empty state
+  // ---------------------------------------------------------------------------
+  if (groupBy === GROUP_BY_STAGE && stageOrder.length === 0) {
     return (
       <div className="flex flex-1 items-center justify-center p-8 text-center">
         <div>
@@ -79,36 +172,69 @@ export default function KanbanBoard({ accounts, members, teams, onEdit }: Props)
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------------
   return (
-    <div className="flex-1 overflow-auto p-4">
-      <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-        <div className="flex h-full gap-3">
-          {columns.map((col) => (
-            <KanbanColumn key={col.id} {...col} count={accountsByStage[col.id]?.length ?? 0}>
-              {(accountsByStage[col.id] ?? []).map((a) => {
-                const rep = a.repId ? members[a.repId] : null;
-                const team = a.repId
-                  ? Object.values(teams).find((t) => t.memberIds.includes(a.repId as string))
-                  : null;
-                return (
-                  <KanbanCard
-                    key={a.id}
-                    accountId={a.id}
-                    name={a.name}
-                    repName={rep?.name}
-                    teamName={team?.name}
-                    teamColor={team?.color}
-                    onEdit={() => onEdit(a.id)}
-                  />
-                );
-              })}
-            </KanbanColumn>
+    <div className="flex flex-1 flex-col overflow-hidden">
+      {/* Group-by toolbar */}
+      <div className="flex items-center gap-2 border-b border-slate-200 bg-white px-4 py-2 text-xs dark:border-slate-700 dark:bg-slate-950">
+        <span className="font-medium text-slate-500 dark:text-slate-400">Group by</span>
+        <select
+          value={groupBy}
+          onChange={(e) => setGroupBy(e.target.value)}
+          className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+        >
+          <option value={GROUP_BY_STAGE}>Pipeline stage</option>
+          {eligibleGroupFields.map((def) => (
+            <option key={def.id} value={def.id}>{def.label}</option>
           ))}
+        </select>
+      </div>
+
+      {/* Computed-grouping banner */}
+      {isComputedGrouping && (
+        <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
+          Grouped by a computed field — cards reflect data, drag to reorder is disabled.
         </div>
-      </DndContext>
+      )}
+
+      {/* Board */}
+      <div className="flex-1 overflow-auto p-4">
+        <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+          <div className="flex h-full gap-3">
+            {columns.map((col) => (
+              <KanbanColumn key={col.id} {...col} count={accountsByCol[col.id]?.length ?? 0}>
+                {(accountsByCol[col.id] ?? []).map((a) => {
+                  const rep = a.repId ? members[a.repId] : null;
+                  const team = a.repId
+                    ? Object.values(teams).find((t) => t.memberIds.includes(a.repId as string))
+                    : null;
+                  return (
+                    <KanbanCard
+                      key={a.id}
+                      accountId={a.id}
+                      name={a.name}
+                      repName={rep?.name}
+                      teamName={team?.name}
+                      teamColor={team?.color}
+                      dragDisabled={isComputedGrouping ?? false}
+                      onEdit={() => onEdit(a.id)}
+                    />
+                  );
+                })}
+              </KanbanColumn>
+            ))}
+          </div>
+        </DndContext>
+      </div>
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Sub-components
+// ---------------------------------------------------------------------------
 
 function KanbanColumn({
   id,
@@ -151,6 +277,7 @@ function KanbanCard({
   repName,
   teamName,
   teamColor,
+  dragDisabled,
   onEdit,
 }: {
   accountId: string;
@@ -158,19 +285,21 @@ function KanbanCard({
   repName?: string;
   teamName?: string;
   teamColor?: string;
+  dragDisabled: boolean;
   onEdit: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: accountId });
-  const style = transform
-    ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
-    : undefined;
+  const style: React.CSSProperties = {
+    ...(transform ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` } : {}),
+    ...(dragDisabled ? { cursor: 'not-allowed' } : {}),
+  };
   return (
     <div
       ref={setNodeRef}
       style={style}
-      {...listeners}
-      {...attributes}
-      className={`cursor-grab rounded-lg border border-slate-200 bg-white p-2 shadow-sm hover:border-slate-300 active:cursor-grabbing dark:border-slate-700 dark:bg-slate-800 ${isDragging ? 'opacity-50' : ''}`}
+      {...(dragDisabled ? {} : listeners)}
+      {...(dragDisabled ? {} : attributes)}
+      className={`rounded-lg border border-slate-200 bg-white p-2 shadow-sm hover:border-slate-300 dark:border-slate-700 dark:bg-slate-800 ${!dragDisabled ? 'cursor-grab active:cursor-grabbing' : ''} ${isDragging ? 'opacity-50' : ''}`}
     >
       <button
         type="button"
