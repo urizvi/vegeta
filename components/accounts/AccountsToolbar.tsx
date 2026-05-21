@@ -7,6 +7,7 @@ import { useEntityNoun } from '@/hooks/useEntityNoun';
 import { useNavModules } from '@/hooks/useNavModules';
 import type { FieldDefinition } from '@/lib/accountFields';
 import type { Account } from '@/types/account';
+import { buildAccountsCsv, downloadCsv } from '@/lib/accountsCsvExport';
 
 type ViewMode = 'table' | 'kanban';
 
@@ -117,6 +118,12 @@ export default function AccountsToolbar({
         <button onClick={onManageStages} className={ghostBtn} title="Manage pipeline stages">Stages</button>
         <button onClick={onManageFields} className={ghostBtn} title="Manage custom fields">Fields</button>
         <button onClick={onImport}       className={ghostBtn}>Import</button>
+        <button
+          onClick={() => downloadCsv('accounts.csv', buildAccountsCsv(accounts, allFieldDefs))}
+          className={ghostBtn}
+        >
+          Export CSV
+        </button>
 
         <button onClick={onAdd} className={primaryBtn}>
           <svg className="h-3 w-3" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
