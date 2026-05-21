@@ -6,8 +6,29 @@ import { useFieldDefs, useActions } from '@/hooks/useTerritoryStore';
 import { useTerritoryStore } from '@/store/territoryStore';
 import type { FieldDefinition, FieldType } from '@/lib/accountFields';
 import FormulaEditor from './formula/FormulaEditor';
-import { collectFieldRefs } from '@/lib/formula/ast';
+import { collectFieldRefs, walk } from '@/lib/formula/ast';
 import { prettyPrint } from '@/lib/formula/parse';
+
+// ── Helper: detect formula references to a removed categorical option ─────────
+
+function computedRefsCategoricalOption(
+  def: FieldDefinition,
+  catFieldId: string,
+  removedOption: string,
+): boolean {
+  if (def.type !== 'computed' || !def.formula) return false;
+  let hit = false;
+  walk(def.formula, (n) => {
+    if (
+      n.kind === 'compare' &&
+      n.left.kind === 'fieldRef' && n.left.fieldId === catFieldId &&
+      n.right.kind === 'literal' && n.right.valueType === 'text' && n.right.value === removedOption
+    ) {
+      hit = true;
+    }
+  });
+  return hit;
+}
 
 // ── Computed field row body ───────────────────────────────────────────────────
 
@@ -67,6 +88,7 @@ const FieldRow = memo(function FieldRow({
   onDragLeave,
   onDrop,
   onDragEnd,
+  onOptionRemoved,
 }: {
   def: FieldDefinition;
   isDragging: boolean;
@@ -80,6 +102,7 @@ const FieldRow = memo(function FieldRow({
   onDragLeave: () => void;
   onDrop: () => void;
   onDragEnd: () => void;
+  onOptionRemoved: (catFieldId: string, removedOption: string) => void;
 }) {
   const [optInput, setOptInput] = useState('');
   const [label, setLabel] = useState(def.label);
@@ -107,6 +130,7 @@ const FieldRow = memo(function FieldRow({
 
   function removeOption(opt: string) {
     updateFieldDef(def.id, { options: (def.options ?? []).filter((o) => o !== opt) });
+    onOptionRemoved(def.id, opt);
   }
 
   const typeBadge: Record<FieldType, string> = {
@@ -381,6 +405,17 @@ export default function ManageFieldsModal({ onClose }: Props) {
 
   const [draggingId,   setDraggingId]   = useState<string | null>(null);
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
+  const [warnings, setWarnings] = useState<{ catFieldLabel: string; removedOption: string; affectedComputed: string[] }[]>([]);
+
+  function handleOptionRemoved(catFieldId: string, removedOption: string) {
+    const catDef = fieldDefs.find((d) => d.id === catFieldId);
+    if (!catDef) return;
+    const affectedComputed = fieldDefs
+      .filter((d) => computedRefsCategoricalOption(d, catFieldId, removedOption))
+      .map((d) => d.label);
+    if (affectedComputed.length === 0) return;
+    setWarnings((ws) => [{ catFieldLabel: catDef.label, removedOption, affectedComputed }, ...ws]);
+  }
 
   useEffect(() => { dialogRef.current?.showModal(); }, []);
 
@@ -436,6 +471,26 @@ export default function ManageFieldsModal({ onClose }: Props) {
       </div>
 
       <div className="max-h-[calc(100vh-14rem)] space-y-2 overflow-y-auto p-5">
+        {warnings.length > 0 && (
+          <div className="space-y-2">
+            {warnings.map((w, i) => (
+              <div key={i} className="flex items-start gap-2 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
+                <div className="flex-1">
+                  Option <strong>&quot;{w.removedOption}&quot;</strong> was removed from <strong>{w.catFieldLabel}</strong>.
+                  {w.affectedComputed.length > 0 && (
+                    <> The following computed field{w.affectedComputed.length === 1 ? ' references' : 's reference'} that value: <strong>{w.affectedComputed.join(', ')}</strong>. Review their formulas.</>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setWarnings((ws) => ws.filter((_, j) => j !== i))}
+                  aria-label="Dismiss warning"
+                  className="text-amber-600 hover:text-amber-900 dark:text-amber-400 dark:hover:text-amber-100"
+                >×</button>
+              </div>
+            ))}
+          </div>
+        )}
         {fieldDefs.length === 0 && (
           <p className="py-4 text-center text-sm text-slate-400">No fields yet. Add one below.</p>
         )}
@@ -454,6 +509,7 @@ export default function ManageFieldsModal({ onClose }: Props) {
             onDragLeave={() => { if (dropTargetId === def.id) setDropTargetId(null); }}
             onDrop={() => handleDrop(def.id)}
             onDragEnd={handleDragEnd}
+            onOptionRemoved={handleOptionRemoved}
           />
         ))}
 
