@@ -4,6 +4,7 @@ import type { Account } from '@/types/territory';
 import type { FieldDefinition } from '@/lib/accountFields';
 import * as directusWrite from '@/lib/directus-write';
 import { getAccounts as fetchAccounts } from '@/lib/directus';
+import { recomputeAccount } from '@/lib/formula/recompute';
 
 interface AccountInput {
   name: string;
@@ -11,11 +12,16 @@ interface AccountInput {
   state?: string;
   geoNodeId?: string | null;
   repId?: string | null;
-  fields?: Record<string, string | number>;
+  fields?: Record<string, string | number | boolean>;
 }
 
 function normalizeName(s: string): string {
   return s.toLowerCase().trim();
+}
+
+/** Returns a copy of `account` with computed fields refreshed against the current fieldDefs. */
+function withComputedRefresh(account: Account, defs: FieldDefinition[]): Account {
+  return recomputeAccount(account, defs);
 }
 
 export interface AccountsSlice {
@@ -75,8 +81,12 @@ export const createAccountsSlice: StateCreator<TerritoryStore, [], [], AccountsS
         repId: data.repId ?? null,
         fields: data.fields ?? {},
       });
+      const refreshed = withComputedRefresh(created, get().fieldDefs);
+      if (Object.keys(refreshed.fields).length !== Object.keys(created.fields).length) {
+        await directusWrite.updateAccount(created.id, { fields: refreshed.fields });
+      }
       set((s) => ({
-        accounts: { ...s.accounts, [created.id]: created },
+        accounts: { ...s.accounts, [created.id]: refreshed },
         accountOrder: [...s.accountOrder, created.id],
       }));
     } catch (err) {
@@ -99,7 +109,11 @@ export const createAccountsSlice: StateCreator<TerritoryStore, [], [], AccountsS
     set((s) => ({ accounts: { ...s.accounts, [id]: { ...prev, ...patch } } }));
     try {
       const updated = await directusWrite.updateAccount(id, patch);
-      set((s) => ({ accounts: { ...s.accounts, [id]: updated } }));
+      const refreshed = withComputedRefresh(updated, get().fieldDefs);
+      if (JSON.stringify(refreshed.fields) !== JSON.stringify(updated.fields)) {
+        await directusWrite.updateAccount(id, { fields: refreshed.fields });
+      }
+      set((s) => ({ accounts: { ...s.accounts, [id]: refreshed } }));
     } catch (err) {
       console.error('updateAccount failed; reverting', err);
       set((s) => ({ accounts: { ...s.accounts, [id]: prev } }));
@@ -114,7 +128,11 @@ export const createAccountsSlice: StateCreator<TerritoryStore, [], [], AccountsS
     set((s) => ({ accounts: { ...s.accounts, [accountId]: { ...prev, fields: nextFields } } }));
     try {
       const updated = await directusWrite.updateAccount(accountId, { fields: nextFields });
-      set((s) => ({ accounts: { ...s.accounts, [accountId]: updated } }));
+      const refreshed = withComputedRefresh(updated, get().fieldDefs);
+      if (JSON.stringify(refreshed.fields) !== JSON.stringify(updated.fields)) {
+        await directusWrite.updateAccount(accountId, { fields: refreshed.fields });
+      }
+      set((s) => ({ accounts: { ...s.accounts, [accountId]: refreshed } }));
     } catch (err) {
       console.error('setAccountField failed; reverting', err);
       set((s) => ({ accounts: { ...s.accounts, [accountId]: prev } }));
@@ -196,10 +214,26 @@ export const createAccountsSlice: StateCreator<TerritoryStore, [], [], AccountsS
     });
 
     try {
-      const [created, updated] = await Promise.all([
+      let [created, updated] = await Promise.all([
         toCreate.length > 0 ? directusWrite.createAccountsBulk(toCreate) : Promise.resolve([]),
         Promise.all(toUpdate.map((u) => directusWrite.updateAccount(u.id, u.patch))),
       ]);
+
+      const computedIds = defs.filter((d) => d.type === 'computed').map((d) => d.id);
+      if (computedIds.length > 0) {
+        const allAccounts = [...created, ...updated];
+        const refreshed = await Promise.all(allAccounts.map(async (a) => {
+          const r = recomputeAccount(a, defs);
+          if (JSON.stringify(r.fields) !== JSON.stringify(a.fields)) {
+            return directusWrite.updateAccount(a.id, { fields: r.fields });
+          }
+          return a;
+        }));
+        const byId = new Map(refreshed.map((a) => [a.id, a]));
+        created = created.map((a) => byId.get(a.id) ?? a);
+        updated = updated.map((a) => byId.get(a.id) ?? a);
+      }
+
       set((s) => {
         const accounts = { ...s.accounts };
         const accountOrder = [...s.accountOrder];
@@ -221,6 +255,9 @@ export const createAccountsSlice: StateCreator<TerritoryStore, [], [], AccountsS
       const sort = get().fieldDefs.length;
       const created = await directusWrite.createFieldDef(def, sort);
       set((s) => ({ fieldDefs: [...s.fieldDefs, created] }));
+      if (created.type === 'computed') {
+        await refreshAllAccountsForComputed(get, set);
+      }
     } catch (err) {
       console.error('addFieldDef failed', err);
       throw err;
@@ -234,6 +271,9 @@ export const createAccountsSlice: StateCreator<TerritoryStore, [], [], AccountsS
     try {
       const updated = await directusWrite.updateFieldDef(id, patch);
       set((s) => ({ fieldDefs: s.fieldDefs.map((d) => (d.id === id ? updated : d)) }));
+      if (updated.type === 'computed') {
+        await refreshAllAccountsForComputed(get, set);
+      }
     } catch (err) {
       console.error('updateFieldDef failed; reverting', err);
       set((s) => ({ fieldDefs: s.fieldDefs.map((d) => (d.id === id ? prev : d)) }));
@@ -243,9 +283,13 @@ export const createAccountsSlice: StateCreator<TerritoryStore, [], [], AccountsS
 
   async removeFieldDef(id) {
     const prev = get().fieldDefs;
+    const removedDef = prev.find((d) => d.id === id);
     set((s) => ({ fieldDefs: s.fieldDefs.filter((d) => d.id !== id) }));
     try {
       await directusWrite.deleteFieldDef(id);
+      if (removedDef?.type === 'computed') {
+        await refreshAllAccountsForComputed(get, set);
+      }
     } catch (err) {
       console.error('removeFieldDef failed; reverting', err);
       set({ fieldDefs: prev });
@@ -267,3 +311,29 @@ export const createAccountsSlice: StateCreator<TerritoryStore, [], [], AccountsS
     }
   },
 });
+
+async function refreshAllAccountsForComputed(
+  get: () => TerritoryStore,
+  set: (partial: Partial<TerritoryStore> | ((s: TerritoryStore) => Partial<TerritoryStore>)) => void,
+): Promise<void> {
+  const defs = get().fieldDefs;
+  const accounts = Object.values(get().accounts);
+  const computedIds = new Set(defs.filter((d) => d.type === 'computed').map((d) => d.id));
+  const nextById: Record<string, Account> = {};
+  await Promise.all(accounts.map(async (a) => {
+    const cleanedFields: Account['fields'] = { ...a.fields };
+    for (const key of Object.keys(cleanedFields)) {
+      const isComputedKey = defs.some((d) => d.id === key && d.type === 'computed');
+      const isStaleComputed = !defs.some((d) => d.id === key) && computedIds.size > 0;
+      if (isComputedKey || isStaleComputed) delete cleanedFields[key];
+    }
+    const refreshed = recomputeAccount({ ...a, fields: cleanedFields }, defs);
+    if (JSON.stringify(refreshed.fields) !== JSON.stringify(a.fields)) {
+      const persisted = await directusWrite.updateAccount(a.id, { fields: refreshed.fields });
+      nextById[a.id] = persisted;
+    } else {
+      nextById[a.id] = a;
+    }
+  }));
+  set((s) => ({ accounts: { ...s.accounts, ...nextById } }));
+}

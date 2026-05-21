@@ -13,7 +13,7 @@ export interface AccountRow {
   geo_node_id?: string | null; // populated once Directus collection column lands
   rep_id: string | null;
   stage_id?: string | null;
-  fields: Record<string, string | number> | null;
+  fields: Record<string, string | number | boolean> | null;
 }
 
 export interface PipelineStageRow {
@@ -85,7 +85,7 @@ export interface AccountInput {
   geoNodeId?: string | null;
   repId?: string | null;
   stageId?: string | null;
-  fields?: Record<string, string | number>;
+  fields?: Record<string, string | number | boolean>;
 }
 
 export function rowToAccount(r: AccountRow): Account {
