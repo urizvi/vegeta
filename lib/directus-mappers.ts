@@ -35,6 +35,11 @@ export interface FieldDefRow {
   entity: FieldEntity | null;
   aliases: string[] | null;
   sort: number | null;
+  // computed-only (new columns — see Task 8):
+  output_type: 'number' | 'text' | 'boolean' | null;
+  formula_source: string | null;
+  formula_form: unknown | null;   // JSON
+  formula_ast: unknown | null;    // JSON
 }
 
 export interface LevelRow {
@@ -105,6 +110,10 @@ export function rowToFieldDef(r: FieldDefRow): FieldDefinition {
     ...(r.options ? { options: r.options } : {}),
     ...(r.is_currency ? { isCurrency: true } : {}),
     ...(r.aliases?.length ? { aliases: r.aliases } : {}),
+    ...(r.output_type ? { outputType: r.output_type } : {}),
+    ...(r.formula_source ? { formulaSource: r.formula_source } : {}),
+    ...(r.formula_form ? { formulaForm: r.formula_form as FieldDefinition['formulaForm'] } : {}),
+    ...(r.formula_ast ? { formula: r.formula_ast as FieldDefinition['formula'] } : {}),
   };
 }
 
@@ -240,6 +249,21 @@ export function fieldDefToRow(input: Partial<Omit<FieldDefinition, 'id'>>): Reco
   if (input.isCurrency !== undefined) patch.is_currency = input.isCurrency;
   if (input.entity !== undefined) patch.entity = input.entity;
   if (input.aliases !== undefined) patch.aliases = input.aliases;
+  return patch;
+}
+
+export function fieldDefToRowPatch(input: Partial<FieldDefinition>): Record<string, unknown> {
+  const patch: Record<string, unknown> = {};
+  if (input.label !== undefined)         patch.label = input.label;
+  if (input.type !== undefined)          patch.type = input.type;
+  if (input.options !== undefined)       patch.options = input.options ?? null;
+  if (input.isCurrency !== undefined)    patch.is_currency = !!input.isCurrency;
+  if (input.entity !== undefined)        patch.entity = input.entity;
+  if (input.aliases !== undefined)       patch.aliases = input.aliases ?? null;
+  if (input.outputType !== undefined)    patch.output_type = input.outputType ?? null;
+  if (input.formulaSource !== undefined) patch.formula_source = input.formulaSource ?? null;
+  if (input.formulaForm !== undefined)   patch.formula_form = input.formulaForm ?? null;
+  if (input.formula !== undefined)       patch.formula_ast = input.formula ?? null;
   return patch;
 }
 

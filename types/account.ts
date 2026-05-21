@@ -7,5 +7,5 @@ export interface Account {
   repId: string | null;
   /** Pipeline stage slug (FK to pipeline_stages.id). Null = unstaged. */
   stageId: string | null;
-  fields: Record<string, string | number>;
+  fields: Record<string, string | number | boolean>;
 }
