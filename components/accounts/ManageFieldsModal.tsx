@@ -1,8 +1,56 @@
 'use client';
 
 import { useRef, useEffect, useState, memo } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { useFieldDefs, useActions } from '@/hooks/useTerritoryStore';
+import { useTerritoryStore } from '@/store/territoryStore';
 import type { FieldDefinition, FieldType } from '@/lib/accountFields';
+import FormulaEditor from './formula/FormulaEditor';
+import { collectFieldRefs } from '@/lib/formula/ast';
+import { prettyPrint } from '@/lib/formula/parse';
+
+// ── Computed field row body ───────────────────────────────────────────────────
+
+function ComputedRowBody({ def }: { def: FieldDefinition }) {
+  const [editing, setEditing] = useState(false);
+  const fieldDefs = useFieldDefs();
+  const accounts = useTerritoryStore(useShallow((s) => Object.values(s.accounts)));
+  const { updateFieldDef } = useActions();
+
+  const broken = def.formula
+    ? collectFieldRefs(def.formula).some((id) => !fieldDefs.some((d) => d.id === id))
+    : false;
+
+  return (
+    <div className="mt-2 space-y-2 pl-6 text-xs">
+      <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
+        {broken && <span title="References a deleted field" className="inline-block h-2 w-2 rounded-full bg-rose-500" />}
+        <span className="font-mono">
+          {def.formula ? prettyPrint(def.formula, { idToName: Object.fromEntries(fieldDefs.map((d) => [d.id, d.label])) }) : '(no formula)'}
+        </span>
+        <button
+          type="button"
+          onClick={() => setEditing((v) => !v)}
+          className="rounded border border-slate-200 px-2 py-0.5 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+        >
+          {editing ? 'Close' : 'Edit formula'}
+        </button>
+      </div>
+      {editing && (
+        <FormulaEditor
+          existing={def}
+          defs={fieldDefs}
+          accounts={accounts}
+          onCancel={() => setEditing(false)}
+          onSave={async (draft) => {
+            await updateFieldDef(def.id, draft);
+            setEditing(false);
+          }}
+        />
+      )}
+    </div>
+  );
+}
 
 // ── Individual field row ──────────────────────────────────────────────────────
 
@@ -65,6 +113,7 @@ const FieldRow = memo(function FieldRow({
     categorical: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
     metric:      'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300',
     text:        'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
+    computed:    'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
   };
 
   return (
@@ -187,6 +236,11 @@ const FieldRow = memo(function FieldRow({
           />
         </div>
       )}
+
+      {/* Formula editor for computed fields */}
+      {def.type === 'computed' && (
+        <ComputedRowBody def={def} />
+      )}
     </div>
   );
 });
@@ -200,6 +254,8 @@ function AddFieldForm() {
   const [optInput,    setOptInput]    = useState('');
   const [options,     setOptions]     = useState<string[]>([]);
   const { addFieldDef } = useActions();
+  const fieldDefs = useFieldDefs();
+  const accounts = useTerritoryStore(useShallow((s) => Object.values(s.accounts)));
 
   function addOption() {
     const v = optInput.trim();
@@ -235,55 +291,78 @@ function AddFieldForm() {
     <div className="rounded-lg border border-dashed border-slate-200 p-3 dark:border-slate-700">
       <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Add Field</p>
       <div className="flex items-center gap-2">
-        <input
-          value={label}
-          onChange={(e) => setLabel(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(); }}
-          placeholder="Field name…"
-          className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-        />
         <select value={type} onChange={(e) => setType(e.target.value as FieldType)} className={selectCls}>
           <option value="categorical">Categorical</option>
           <option value="metric">Metric</option>
           <option value="text">Text</option>
+          <option value="computed">Computed (ƒ)</option>
         </select>
-        {type === 'metric' && (
-          <label className="flex cursor-pointer items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
-            <input
-              type="checkbox"
-              checked={isCurrency}
-              onChange={(e) => setIsCurrency(e.target.checked)}
-              className="h-3 w-3 accent-indigo-600"
-            />
-            Currency ($)
-          </label>
-        )}
-        <button
-          onClick={handleSubmit}
-          disabled={!label.trim()}
-          className="shrink-0 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          Add
-        </button>
       </div>
 
-      {type === 'categorical' && (
-        <div className="mt-2 flex flex-wrap items-center gap-1">
-          {options.map((opt) => (
-            <span
-              key={opt}
-              className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700 dark:bg-slate-800 dark:text-slate-300"
+      {type !== 'computed' && (
+        <>
+          <div className="mt-2 flex items-center gap-2">
+            <input
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(); }}
+              placeholder="Field name…"
+              className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+            />
+            {type === 'metric' && (
+              <label className="flex cursor-pointer items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
+                <input
+                  type="checkbox"
+                  checked={isCurrency}
+                  onChange={(e) => setIsCurrency(e.target.checked)}
+                  className="h-3 w-3 accent-indigo-600"
+                />
+                Currency ($)
+              </label>
+            )}
+            <button
+              onClick={handleSubmit}
+              disabled={!label.trim()}
+              className="shrink-0 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {opt}
-              <button onClick={() => removeOption(opt)} className="text-slate-400 hover:text-rose-500">×</button>
-            </span>
-          ))}
-          <input
-            value={optInput}
-            onChange={(e) => setOptInput(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addOption(); } }}
-            placeholder="+ add option (Enter)"
-            className="rounded border border-dashed border-slate-200 bg-transparent px-2 py-0.5 text-xs text-slate-500 outline-none placeholder:text-slate-300 focus:border-slate-400 dark:border-slate-700 dark:placeholder:text-slate-600"
+              Add
+            </button>
+          </div>
+
+          {type === 'categorical' && (
+            <div className="mt-2 flex flex-wrap items-center gap-1">
+              {options.map((opt) => (
+                <span
+                  key={opt}
+                  className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                >
+                  {opt}
+                  <button onClick={() => removeOption(opt)} className="text-slate-400 hover:text-rose-500">×</button>
+                </span>
+              ))}
+              <input
+                value={optInput}
+                onChange={(e) => setOptInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addOption(); } }}
+                placeholder="+ add option (Enter)"
+                className="rounded border border-dashed border-slate-200 bg-transparent px-2 py-0.5 text-xs text-slate-500 outline-none placeholder:text-slate-300 focus:border-slate-400 dark:border-slate-700 dark:placeholder:text-slate-600"
+              />
+            </div>
+          )}
+        </>
+      )}
+
+      {type === 'computed' && (
+        <div className="mt-3">
+          <FormulaEditor
+            existing={null}
+            defs={fieldDefs}
+            accounts={accounts}
+            onCancel={() => setType('categorical')}
+            onSave={async (draft) => {
+              await addFieldDef(draft);
+              setLabel(''); setType('categorical');
+            }}
           />
         </div>
       )}
