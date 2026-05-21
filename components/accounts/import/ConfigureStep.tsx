@@ -42,6 +42,13 @@ const TYPE_OPTIONS: { value: FieldTypeChoice; label: string }[] = [
   { value: 'dropdown', label: 'Dropdown' },
 ];
 
+function isComputedMatch(header: string, computedDefs: FieldDefinition[]): FieldDefinition | undefined {
+  const lower = header.trim().toLowerCase();
+  return computedDefs.find(
+    (d) => d.label.toLowerCase() === lower || (d.aliases ?? []).some((a) => a.toLowerCase() === lower),
+  );
+}
+
 export default function ConfigureStep({
   rawHeaders, rows, fieldDefs, configs, onChange, onConfirm, onBack, onSaveAlias,
 }: Props) {
@@ -62,6 +69,23 @@ export default function ConfigureStep({
   const validation = useMemo(() => validateConfigs(configs), [configs]);
   const ownerNoun = useOwnerNoun();
   const roleOptions = useMemo(() => buildRoleOptions(ownerNoun), [ownerNoun]);
+
+  const computedDefs = useMemo(() => fieldDefs.filter((d) => d.type === 'computed'), [fieldDefs]);
+
+  // Split CSV headers: those that auto-match a computed field are surfaced separately as skipped.
+  const { mappableHeaders, skippedComputedHeaders } = useMemo(() => {
+    const mappable: string[] = [];
+    const skipped: { header: string; matchedDef: FieldDefinition }[] = [];
+    for (const header of rawHeaders) {
+      const matched = isComputedMatch(header, computedDefs);
+      if (matched) {
+        skipped.push({ header, matchedDef: matched });
+      } else {
+        mappable.push(header);
+      }
+    }
+    return { mappableHeaders: mappable, skippedComputedHeaders: skipped };
+  }, [rawHeaders, computedDefs]);
 
   function setRole(header: string, role: ColumnRole) {
     const next: ColumnConfigMap = { ...configs };
@@ -120,7 +144,7 @@ export default function ConfigureStep({
             </tr>
           </thead>
           <tbody>
-            {rawHeaders.map((header) => {
+            {mappableHeaders.map((header) => {
               const cfg: ColumnConfig = configs[header] ?? { role: 'skip' };
               const isField = cfg.role === 'field';
               const lockedDef = cfg.existingFieldId ? fieldDefById[cfg.existingFieldId] : null;
@@ -195,6 +219,27 @@ export default function ConfigureStep({
           </tbody>
         </table>
       </div>
+
+      {skippedComputedHeaders.length > 0 && (
+        <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs dark:border-slate-700 dark:bg-slate-800/40">
+          <p className="mb-1.5 font-medium text-slate-500 dark:text-slate-400">
+            Skipped — computed field{skippedComputedHeaders.length !== 1 ? 's' : ''}
+          </p>
+          <ul className="space-y-1">
+            {skippedComputedHeaders.map(({ header, matchedDef }) => (
+              <li key={header} className="flex items-start gap-1.5 text-slate-400 dark:text-slate-500">
+                <span className="mt-0.5 shrink-0 text-amber-400">↷</span>
+                <span>
+                  <span className="font-medium text-slate-600 dark:text-slate-300">{header}</span>
+                  {' — '}matches the computed field{' '}
+                  <span className="font-medium text-emerald-600 dark:text-emerald-400">{matchedDef.label}</span>
+                  {' '}and will be ignored — computed values are derived from other fields.
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {!validation.ok && (
         <div className="rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-600 dark:bg-rose-950/40 dark:text-rose-300">

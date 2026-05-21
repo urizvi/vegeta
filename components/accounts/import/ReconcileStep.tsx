@@ -6,12 +6,14 @@ const TYPE_LABEL: Record<FieldType, string> = {
   categorical: 'Dropdown',
   metric:      'Number',
   text:        'Text',
+  computed:    'Computed',
 };
 
 const TYPE_BADGE: Record<FieldType, string> = {
   categorical: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
   metric:      'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300',
   text:        'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
+  computed:    'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
 };
 
 interface Props {

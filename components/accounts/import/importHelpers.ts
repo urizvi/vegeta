@@ -97,6 +97,11 @@ export function inferDefaultConfigs(
         (d.aliases?.includes(h) ?? false),
     );
     if (existing) {
+      // Computed fields cannot be imported — skip the column automatically.
+      if (existing.type === 'computed') {
+        configs[header] = { role: 'skip' };
+        continue;
+      }
       configs[header] = {
         role: 'field',
         type: fieldTypeChoiceFromDef(existing),
