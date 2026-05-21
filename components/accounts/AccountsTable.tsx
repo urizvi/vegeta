@@ -1,12 +1,13 @@
 'use client';
 
-import { memo, useState, useCallback, useMemo } from 'react';
+import React, { memo, useState, useCallback, useMemo } from 'react';
 import { useActions, useFieldDefs, useGeoNodes, useGeoNodeOrder } from '@/hooks/useTerritoryStore';
 import { useEntityNoun } from '@/hooks/useEntityNoun';
 import { useOwnerNoun } from '@/hooks/useOwnerNoun';
 import { flattenGeoTree } from './GeoPicker';
 import { optionColor, formatFieldValue } from '@/lib/accountFields';
 import type { FieldDefinition } from '@/lib/accountFields';
+import { prettyPrint } from '@/lib/formula/parse';
 import type { Account } from '@/types/account';
 import type { Member, SalesTeam } from '@/types/territory';
 
@@ -58,7 +59,9 @@ function getAccountValue(
   if (key === 'geo')        return account.geoNodeId ? (geoLabelById[account.geoNodeId] ?? '') : '';
   if (key === 'repId')      return account.repId ?? '';
   if (key === 'ownerChain') return ownerChainNames(account.repId, members, teams).join(' › ');
-  return account.fields[key] ?? '';
+  const v = account.fields[key];
+  if (typeof v === 'boolean') return v ? 1 : 0;
+  return v ?? '';
 }
 
 // ── Shared focus ring ─────────────────────────────────────────────────────────
@@ -89,7 +92,7 @@ function SortChevron({ active, dir }: { active: boolean; dir: 'asc' | 'desc' }) 
 }
 
 function SortHeader({ label, sortKey, activeSortKey, sortDir, onSort, right }: {
-  label: string; sortKey: SortKey; activeSortKey: SortKey | null;
+  label: React.ReactNode; sortKey: SortKey; activeSortKey: SortKey | null;
   sortDir: 'asc' | 'desc'; onSort: (k: SortKey) => void; right?: boolean;
 }) {
   const active = activeSortKey === sortKey;
@@ -275,6 +278,22 @@ const AccountRow = memo(function AccountRow({ account, fieldDefs, selected, memb
           );
         }
 
+        if (def.type === 'computed') {
+          if (def.outputType === 'number') {
+            return (
+              <td key={def.id} className="w-24 px-3 py-2.5 text-right text-xs font-medium tabular-nums text-slate-700 dark:text-slate-200">
+                {formatFieldValue(rawVal, def)}
+              </td>
+            );
+          }
+          // boolean or text
+          return (
+            <td key={def.id} className="max-w-[140px] px-3 py-2.5 text-xs text-slate-500 dark:text-slate-400">
+              {formatFieldValue(rawVal, def)}
+            </td>
+          );
+        }
+
         // text
         return (
           <td key={def.id} className="max-w-[140px] px-3 py-2.5 text-xs text-slate-500 dark:text-slate-400">
@@ -361,6 +380,7 @@ export default function AccountsTable({ accounts, members, teams, teamOrder, onE
     flat.forEach((row) => { out[row.id] = row.label; });
     return out;
   }, [geoNodes, geoNodeOrder]);
+  const idMap = useMemo(() => Object.fromEntries(fieldDefs.map((d) => [d.id, d.label])), [fieldDefs]);
   const [sortKey,  setSortKey]  = useState<SortKey | null>('name');
   const [sortDir,  setSortDir]  = useState<'asc' | 'desc'>('asc');
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -452,9 +472,21 @@ export default function AccountsTable({ accounts, members, teams, teamOrder, onE
               {fieldDefs.map((def) => (
                 <SortHeader
                   key={def.id}
-                  label={def.label}
+                  label={
+                    <span className="inline-flex items-center gap-1">
+                      {def.label}
+                      {def.type === 'computed' && (
+                        <span
+                          title={def.formula ? prettyPrint(def.formula, { idToName: idMap }) : 'Computed field'}
+                          className="inline-flex h-3.5 w-3.5 items-center justify-center rounded bg-emerald-100 text-[10px] font-bold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+                        >
+                          ƒ
+                        </span>
+                      )}
+                    </span>
+                  }
                   sortKey={def.id}
-                  right={def.type === 'metric'}
+                  right={def.type === 'metric' || (def.type === 'computed' && def.outputType === 'number')}
                   {...sortHeaderProps}
                 />
               ))}

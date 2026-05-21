@@ -1,10 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { useCategoricalFields } from '@/hooks/useTerritoryStore';
+import { useCategoricalFields, useFieldDefs } from '@/hooks/useTerritoryStore';
 import WorkspaceSwitcher from '@/components/WorkspaceSwitcher';
 import { useEntityNoun } from '@/hooks/useEntityNoun';
 import { useNavModules } from '@/hooks/useNavModules';
+import type { FieldDefinition } from '@/lib/accountFields';
+import type { Account } from '@/types/account';
 
 type ViewMode = 'table' | 'kanban';
 
@@ -13,6 +15,7 @@ interface Props {
   filters:         Record<string, string>;
   totalCount:      number;
   view:            ViewMode;
+  accounts:        Account[];
   onView:          (v: ViewMode) => void;
   onSearch:        (v: string) => void;
   onFilter:        (patch: Record<string, string>) => void;
@@ -21,6 +24,19 @@ interface Props {
   onImport:        () => void;
   onManageFields:  () => void;
   onManageStages:  () => void;
+}
+
+function deriveDistinctValues(def: FieldDefinition, accounts: Account[]): string[] {
+  if (def.type === 'categorical') return def.options ?? [];
+  if (def.type === 'computed' && def.outputType === 'text') {
+    const seen = new Set<string>();
+    for (const a of accounts) {
+      const v = a.fields[def.id];
+      if (typeof v === 'string' && v !== '') seen.add(v);
+    }
+    return [...seen].sort();
+  }
+  return [];
 }
 
 const ghostBtn =
@@ -35,14 +51,20 @@ const navActive =
   'rounded-[7px] bg-panel px-2.5 py-1 text-[11px] font-semibold tracking-tight text-ink shadow-xs';
 
 export default function AccountsToolbar({
-  search, filters, totalCount, view, onView, onSearch, onFilter, onClearFilters,
+  search, filters, totalCount, view, accounts, onView, onSearch, onFilter, onClearFilters,
   onAdd, onImport, onManageFields, onManageStages,
 }: Props) {
   const categoricalFields = useCategoricalFields();
+  const allFieldDefs = useFieldDefs();
   const entitySingular = useEntityNoun('singular');
   const entityPlural = useEntityNoun('plural');
   const navModules = useNavModules();
   const activeCount = Object.values(filters).filter(Boolean).length;
+
+  // Computed text fields that have at least one distinct value (derived from materialized data)
+  const computedTextFields = allFieldDefs.filter(
+    (def) => def.type === 'computed' && def.outputType === 'text',
+  );
 
   return (
     <header className="relative flex flex-col border-b border-hairline bg-canvas/80 backdrop-blur-md">
@@ -117,7 +139,7 @@ export default function AccountsToolbar({
           />
         </div>
 
-        {categoricalFields.length > 0 && (
+        {(categoricalFields.length > 0 || computedTextFields.length > 0) && (
           <span className="h-4 w-px bg-hairline" aria-hidden="true" />
         )}
 
@@ -129,11 +151,29 @@ export default function AccountsToolbar({
             className="appearance-none rounded-md border border-hairline bg-panel/60 py-1.5 pl-2.5 pr-7 text-[11px] font-medium text-ink-body outline-none transition-colors hover:border-hairline-strong hover:bg-panel focus:border-brand/60 focus:ring-2 focus:ring-brand/20 [background-image:url('data:image/svg+xml;utf8,<svg%20xmlns=%22http://www.w3.org/2000/svg%22%20width=%2210%22%20height=%2210%22%20viewBox=%220%200%2010%2010%22><path%20d=%22M2%204l3%203%203-3%22%20stroke=%22%2397a0b3%22%20stroke-width=%221.4%22%20fill=%22none%22%20stroke-linecap=%22round%22%20stroke-linejoin=%22round%22/></svg>')] [background-position:right_0.5rem_center] [background-repeat:no-repeat] [background-size:10px_10px]"
           >
             <option value="">All {def.label}s</option>
-            {(def.options ?? []).map((o) => (
+            {deriveDistinctValues(def, accounts).map((o) => (
               <option key={o} value={o}>{o}</option>
             ))}
           </select>
         ))}
+
+        {computedTextFields.map((def) => {
+          const opts = deriveDistinctValues(def, accounts);
+          if (opts.length === 0) return null;
+          return (
+            <select
+              key={def.id}
+              value={filters[def.id] ?? ''}
+              onChange={(e) => onFilter({ [def.id]: e.target.value })}
+              className="appearance-none rounded-md border border-hairline bg-panel/60 py-1.5 pl-2.5 pr-7 text-[11px] font-medium text-ink-body outline-none transition-colors hover:border-hairline-strong hover:bg-panel focus:border-brand/60 focus:ring-2 focus:ring-brand/20 [background-image:url('data:image/svg+xml;utf8,<svg%20xmlns=%22http://www.w3.org/2000/svg%22%20width=%2210%22%20height=%2210%22%20viewBox=%220%200%2010%2010%22><path%20d=%22M2%204l3%203%203-3%22%20stroke=%22%2397a0b3%22%20stroke-width=%221.4%22%20fill=%22none%22%20stroke-linecap=%22round%22%20stroke-linejoin=%22round%22/></svg>')] [background-position:right_0.5rem_center] [background-repeat:no-repeat] [background-size:10px_10px]"
+            >
+              <option value="">All {def.label}s</option>
+              {opts.map((o) => (
+                <option key={o} value={o}>{o}</option>
+              ))}
+            </select>
+          );
+        })}
 
         {activeCount > 0 && (
           <button

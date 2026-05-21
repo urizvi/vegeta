@@ -37,18 +37,20 @@ export default function AccountsApp() {
 
   const openDetail = (id: string) => router.push(`/accounts/${encodeURIComponent(id)}`);
 
+  const allAccounts = useMemo(
+    () => accountOrder.map((id) => accounts[id]).filter(Boolean) as Account[],
+    [accountOrder, accounts],
+  );
+
   const filtered = useMemo(() => {
-    return accountOrder
-      .map((id) => accounts[id])
-      .filter(Boolean)
-      .filter((a): a is Account => {
-        if (search && !a.name.toLowerCase().includes(search.toLowerCase())) return false;
-        for (const [fieldId, val] of Object.entries(filters)) {
-          if (val && a.fields[fieldId] !== val) return false;
-        }
-        return true;
-      });
-  }, [accountOrder, accounts, search, filters]);
+    return allAccounts.filter((a): a is Account => {
+      if (search && !a.name.toLowerCase().includes(search.toLowerCase())) return false;
+      for (const [fieldId, val] of Object.entries(filters)) {
+        if (val && a.fields[fieldId] !== val) return false;
+      }
+      return true;
+    });
+  }, [allAccounts, search, filters]);
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-canvas">
@@ -57,6 +59,7 @@ export default function AccountsApp() {
         filters={filters}
         totalCount={filtered.length}
         view={view}
+        accounts={allAccounts}
         onView={setView}
         onSearch={setSearch}
         onFilter={(patch) => setFilters((f) => ({ ...f, ...patch }))}
