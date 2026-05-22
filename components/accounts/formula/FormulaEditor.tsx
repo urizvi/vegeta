@@ -89,6 +89,20 @@ export default function FormulaEditor({ existing, defs, accounts, onCancel, onSa
 
   const validationError = validate();
 
+  const tooComplexInSimple = useMemo(() => {
+    if (!draftAst) return false;
+    return !isExpressibleInSimple(draftAst);
+  }, [draftAst]);
+
+  function handleModeChange(next: 'simple' | 'advanced') {
+    if (next === 'simple' && mode === 'advanced' && draftAst) {
+      const recovered = astToSimple(draftAst);
+      if (recovered) setSimpleCfg(recovered);
+      // If recovered is null, SimpleMode will show the tooComplex banner.
+    }
+    setMode(next);
+  }
+
   async function handleSave() {
     if (validationError) return;
     await onSave({
@@ -115,7 +129,7 @@ export default function FormulaEditor({ existing, defs, accounts, onCancel, onSa
         isCurrency={isCurrency}
         onIsCurrencyChange={setIsCurrency}
         mode={mode}
-        onModeChange={setMode}
+        onModeChange={handleModeChange}
         previewAccountId={previewId}
         previewOptions={accounts.map((a) => ({ id: a.id, name: a.name }))}
         onPreviewAccountChange={setPreviewId}
@@ -129,7 +143,7 @@ export default function FormulaEditor({ existing, defs, accounts, onCancel, onSa
             outputType={outputType}
             defs={defs}
             onChange={setSimpleCfg}
-            tooComplex={existing?.formula ? !isExpressibleInSimple(existing.formula) : false}
+            tooComplex={tooComplexInSimple}
           />
         ) : (
           <AdvancedMode
@@ -162,7 +176,18 @@ export default function FormulaEditor({ existing, defs, accounts, onCancel, onSa
           fieldLabel={existing.label}
           currentType={existing.outputType ?? 'number'}
           onCancel={() => setShowConvert(false)}
-          onConfirm={(next: ComputedOutput) => {
+          onConfirm={async (next: ComputedOutput) => {
+            // 1. Persist the cleared, type-converted def to the store first.
+            //    This fires updateFieldDef → recompute tail → workspace backfill.
+            await onSave({
+              label: label.trim() || existing!.label,
+              type: 'computed',
+              entity: 'account',
+              outputType: next,
+              isCurrency: next === 'number' ? isCurrency : undefined,
+              // Intentionally omit formula / formulaSource / formulaForm so they're cleared.
+            });
+            // 2. Then update local editor state so the UI reflects the new type.
             setOutputType(next);
             setSimpleCfg(DEFAULT_SIMPLE[next]);
             setAdvancedSrc('');
