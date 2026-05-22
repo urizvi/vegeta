@@ -288,6 +288,16 @@ export const createAccountsSlice: StateCreator<TerritoryStore, [], [], AccountsS
     try {
       await directusWrite.deleteFieldDef(id);
       if (removedDef?.type === 'computed') {
+        // Sweep the now-orphaned computed-field key out of every account's fields.
+        const accounts = Object.values(get().accounts);
+        await Promise.all(accounts.map(async (a) => {
+          if (id in a.fields) {
+            const nextFields = { ...a.fields };
+            delete nextFields[id];
+            await directusWrite.updateAccount(a.id, { fields: nextFields });
+            set((s) => ({ accounts: { ...s.accounts, [a.id]: { ...s.accounts[a.id], fields: nextFields } } }));
+          }
+        }));
         await refreshAllAccountsForComputed(get, set);
       }
     } catch (err) {
@@ -321,12 +331,11 @@ async function refreshAllAccountsForComputed(
   const computedIds = new Set(defs.filter((d) => d.type === 'computed').map((d) => d.id));
   const nextById: Record<string, Account> = {};
   await Promise.all(accounts.map(async (a) => {
+    // Strip ONLY the current set of computed-field keys so recompute writes fresh values.
+    // Do NOT touch other keys — they may be orphaned non-computed field data the user
+    // intentionally preserved via the "delete field but keep data" flow.
     const cleanedFields: Account['fields'] = { ...a.fields };
-    for (const key of Object.keys(cleanedFields)) {
-      const isComputedKey = defs.some((d) => d.id === key && d.type === 'computed');
-      const isStaleComputed = !defs.some((d) => d.id === key) && computedIds.size > 0;
-      if (isComputedKey || isStaleComputed) delete cleanedFields[key];
-    }
+    for (const id of computedIds) delete cleanedFields[id];
     const refreshed = recomputeAccount({ ...a, fields: cleanedFields }, defs);
     if (JSON.stringify(refreshed.fields) !== JSON.stringify(a.fields)) {
       const persisted = await directusWrite.updateAccount(a.id, { fields: refreshed.fields });
