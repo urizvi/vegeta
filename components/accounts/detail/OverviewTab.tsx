@@ -33,7 +33,19 @@ export default function OverviewTab({
           accountDefs.map((def) => (
             <Row
               key={def.id}
-              label={def.label}
+              label={
+                <span className="inline-flex items-center gap-1">
+                  {def.label}
+                  {def.type === 'computed' && (
+                    <span
+                      title="Computed field"
+                      className="inline-flex h-4 w-4 items-center justify-center rounded bg-emerald-100 text-[10px] font-bold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+                    >
+                      ƒ
+                    </span>
+                  )}
+                </span>
+              }
               value={formatFieldValue(account.fields[def.id], def)}
             />
           ))
@@ -56,7 +68,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+function Row({ label, value }: { label: React.ReactNode; value: string }) {
   return (
     <div className="grid grid-cols-3 gap-4 px-4 py-2.5 text-xs">
       <div className="col-span-1 text-slate-500 dark:text-slate-400">{label}</div>
