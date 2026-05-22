@@ -8,6 +8,8 @@ import { flattenGeoTree } from './GeoPicker';
 import { optionColor, formatFieldValue } from '@/lib/accountFields';
 import type { FieldDefinition } from '@/lib/accountFields';
 import { prettyPrint } from '@/lib/formula/parse';
+import { evaluate } from '@/lib/formula/evaluate';
+import { evalErrorMessage } from '@/lib/formula/evalErrorMessage';
 import type { Account } from '@/types/account';
 import type { Member, SalesTeam } from '@/types/territory';
 
@@ -279,17 +281,22 @@ const AccountRow = memo(function AccountRow({ account, fieldDefs, selected, memb
         }
 
         if (def.type === 'computed') {
+          let tooltip: string | undefined;
+          if ((rawVal === undefined || rawVal === null || rawVal === '') && def.formula) {
+            const r = evaluate(def.formula, account, fieldDefs);
+            if (!r.ok) tooltip = evalErrorMessage(r.error, fieldDefs);
+          }
           if (def.outputType === 'number') {
             return (
               <td key={def.id} className="w-24 px-3 py-2.5 text-right text-xs font-medium tabular-nums text-slate-700 dark:text-slate-200">
-                {formatFieldValue(rawVal, def)}
+                <span title={tooltip}>{formatFieldValue(rawVal, def)}</span>
               </td>
             );
           }
           // boolean or text
           return (
             <td key={def.id} className="max-w-[140px] px-3 py-2.5 text-xs text-slate-500 dark:text-slate-400">
-              {formatFieldValue(rawVal, def)}
+              <span title={tooltip}>{formatFieldValue(rawVal, def)}</span>
             </td>
           );
         }

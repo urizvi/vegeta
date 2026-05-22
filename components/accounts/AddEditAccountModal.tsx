@@ -9,6 +9,7 @@ import { useOwnerNoun } from '@/hooks/useOwnerNoun';
 import { useModuleEnabled } from '@/hooks/useModuleEnabled';
 import type { Account } from '@/types/account';
 import { evaluate } from '@/lib/formula/evaluate';
+import { evalErrorMessage } from '@/lib/formula/evalErrorMessage';
 import { formatFieldValue } from '@/lib/accountFields';
 import type { FieldDefinition } from '@/lib/accountFields';
 import GeoPicker from './GeoPicker';
@@ -372,13 +373,14 @@ function ComputedPreviewRow({
   const text = r.ok
     ? formatFieldValue(r.value as string | number | boolean, def)
     : '—';
+  const tooltip = r.ok ? undefined : evalErrorMessage(r.error, defs);
 
   return (
     <div className="flex items-center gap-2 py-1">
       <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{def.label}</span>
       <span title="Computed field"
         className="inline-flex h-4 w-4 items-center justify-center rounded bg-emerald-100 text-[10px] font-bold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">ƒ</span>
-      <span className="ml-auto text-sm text-slate-600 dark:text-slate-200">{text}</span>
+      <span title={tooltip} className="ml-auto text-sm text-slate-600 dark:text-slate-200">{text}</span>
     </div>
   );
 }
