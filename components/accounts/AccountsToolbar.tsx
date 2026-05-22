@@ -67,6 +67,11 @@ export default function AccountsToolbar({
     (def) => def.type === 'computed' && def.outputType === 'text',
   );
 
+  // Computed boolean fields — always show tri-state All / True / False pill
+  const computedBooleanFields = allFieldDefs.filter(
+    (def) => def.type === 'computed' && def.outputType === 'boolean',
+  );
+
   return (
     <header className="relative flex flex-col border-b border-hairline bg-canvas/80 backdrop-blur-md">
       {/* Top row: brand · workspace · nav · primary actions */}
@@ -146,7 +151,7 @@ export default function AccountsToolbar({
           />
         </div>
 
-        {(categoricalFields.length > 0 || computedTextFields.length > 0) && (
+        {(categoricalFields.length > 0 || computedTextFields.length > 0 || computedBooleanFields.length > 0) && (
           <span className="h-4 w-px bg-hairline" aria-hidden="true" />
         )}
 
@@ -181,6 +186,19 @@ export default function AccountsToolbar({
             </select>
           );
         })}
+
+        {computedBooleanFields.map((def) => (
+          <select
+            key={def.id}
+            value={filters[def.id] ?? ''}
+            onChange={(e) => onFilter({ [def.id]: e.target.value })}
+            className="appearance-none rounded-md border border-hairline bg-panel/60 py-1.5 pl-2.5 pr-7 text-[11px] font-medium text-ink-body outline-none transition-colors hover:border-hairline-strong hover:bg-panel focus:border-brand/60 focus:ring-2 focus:ring-brand/20 [background-image:url('data:image/svg+xml;utf8,<svg%20xmlns=%22http://www.w3.org/2000/svg%22%20width=%2210%22%20height=%2210%22%20viewBox=%220%200%2010%2010%22><path%20d=%22M2%204l3%203%203-3%22%20stroke=%22%2397a0b3%22%20stroke-width=%221.4%22%20fill=%22none%22%20stroke-linecap=%22round%22%20stroke-linejoin=%22round%22/></svg>')] [background-position:right_0.5rem_center] [background-repeat:no-repeat] [background-size:10px_10px]"
+          >
+            <option value="">All {def.label}</option>
+            <option value="true">True</option>
+            <option value="false">False</option>
+          </select>
+        ))}
 
         {activeCount > 0 && (
           <button

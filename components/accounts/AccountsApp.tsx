@@ -46,7 +46,11 @@ export default function AccountsApp() {
     return allAccounts.filter((a): a is Account => {
       if (search && !a.name.toLowerCase().includes(search.toLowerCase())) return false;
       for (const [fieldId, val] of Object.entries(filters)) {
-        if (val && a.fields[fieldId] !== val) return false;
+        if (!val) continue;
+        const cell = a.fields[fieldId];
+        if (val === 'true'  && cell !== true)  return false;
+        if (val === 'false' && cell !== false) return false;
+        if (val !== 'true' && val !== 'false' && cell !== val) return false;
       }
       return true;
     });
