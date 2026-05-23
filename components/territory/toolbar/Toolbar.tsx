@@ -1,18 +1,41 @@
 'use client';
 
+import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import {
   useActiveView, useDrillDownCountryCode, useMapTheme, useAccountOrder,
   useShowAccounts, useMapAccountMetric, useActions, useMetricFields,
+  useActivePaintGeo, useActiveEraser, useActiveSelect, useCanUndoGeo, useCanRedoGeo,
+  useShowLabels,
 } from '@/hooks/useTerritoryStore';
-import { DIRECTUS_ADMIN_URL } from '@/lib/directus';
+import { useSelectionCount } from '@/store/slices/selectionSelectors';
+import type { ZoomCommand } from '@/store/slices/mapUiSlice';
+import { logout } from '@/lib/auth';
+import { useRouter } from 'next/navigation';
 import { MAP_THEMES } from '@/lib/mapThemes';
 import type { MapThemeId } from '@/lib/mapThemes';
+import WorkspaceSwitcher from '@/components/WorkspaceSwitcher';
+import { useEntityNoun } from '@/hooks/useEntityNoun';
+import { useNavModules } from '@/hooks/useNavModules';
+import { MapHelpPopover } from '@/components/territory/map/MapHelpPopover';
+import { isEditableTarget } from '@/lib/isEditableTarget';
 
 interface ToolbarProps {
   drillDownCountryName: string | null;
 }
 
-const THEME_ORDER: MapThemeId[] = ['deep-ocean', 'crisp-atlas', 'dark-studio'];
+const THEME_ORDER: MapThemeId[] = ['vegeta', 'crisp-atlas', 'deep-ocean', 'dark-studio'];
+
+const ghostBtn =
+  'inline-flex items-center gap-1.5 rounded-md border border-hairline bg-panel/60 px-2.5 py-1.5 text-[11px] font-medium text-ink-body transition-all hover:border-hairline-strong hover:bg-panel hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30';
+
+const iconBtn =
+  'flex h-7 w-7 items-center justify-center rounded-md border border-hairline bg-panel/60 text-ink-muted transition-colors hover:border-hairline-strong hover:bg-panel hover:text-ink disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30';
+
+const navLink =
+  'rounded-[7px] px-2.5 py-1 text-[11px] font-medium tracking-tight text-ink-muted transition-colors hover:text-ink';
+const navActive =
+  'rounded-[7px] bg-panel px-2.5 py-1 text-[11px] font-semibold tracking-tight text-ink shadow-xs';
 
 export default function Toolbar({ drillDownCountryName }: ToolbarProps) {
   const activeView    = useActiveView();
@@ -22,61 +45,267 @@ export default function Toolbar({ drillDownCountryName }: ToolbarProps) {
   const showAccounts  = useShowAccounts();
   const mapMetric     = useMapAccountMetric();
   const metricFields  = useMetricFields();
+  const showLabels    = useShowLabels();
+  const paintGeo      = useActivePaintGeo();
+  const eraserActive  = useActiveEraser();
+  const selectActive  = useActiveSelect();
+  const canUndo       = useCanUndoGeo();
+  const canRedo       = useCanRedoGeo();
+  const entityPlural  = useEntityNoun('plural');
+  const navModules    = useNavModules();
   const {
     setActiveView, setDrillDownCountryCode, setMapTheme,
-    toggleShowAccounts, setMapAccountMetric,
+    toggleShowAccounts, setMapAccountMetric, setActivePaintGeo, setActiveEraser, setActiveSelect,
+    undoGeoOp, redoGeoOp, toggleShowLabels, clearSelection, setMapZoomCommand,
   } = useActions();
+  const [helpOpen, setHelpOpen] = useState(false);
+  const selectionCount = useSelectionCount();
 
-  const manageAccountsUrl = `${DIRECTUS_ADMIN_URL}/content/accounts`;
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (isEditableTarget(e.target)) return;
+
+      // Esc cascade: popover → selection → paint/eraser
+      // The sidebar's local handler runs first when focus is inside the sidebar.
+      if (e.key === 'Escape') {
+        if (document.activeElement?.closest('[data-geo-sidebar-root]')) return;
+        if (helpOpen) { setHelpOpen(false); return; }
+        if (selectionCount > 0) { clearSelection(); return; }
+        if (paintGeo || eraserActive) {
+          setActivePaintGeo(null);
+          setActiveEraser(false);
+          return;
+        }
+        return;
+      }
+
+      // ? toggles help (key === '?' on most layouts)
+      if (e.key === '?') {
+        e.preventDefault();
+        setHelpOpen((v) => !v);
+        return;
+      }
+
+      // / focuses the Geos sidebar search input
+      if (e.key === '/') {
+        e.preventDefault();
+        document.getElementById('geo-sidebar-search')?.focus();
+        return;
+      }
+
+      // g focuses the first row in the Geos sidebar tree
+      if (e.key === 'g' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        document.querySelector<HTMLElement>('[data-geo-node-row]')?.focus();
+        return;
+      }
+
+      // Arrow / +/- / 0 — dispatch zoom commands (no modifier)
+      if (!e.metaKey && !e.ctrlKey && !e.altKey) {
+        let cmd: ZoomCommand | null = null;
+        const PAN_PX = 40;
+        if (e.key === 'ArrowUp')         cmd = { kind: 'panBy', dx: 0, dy: -PAN_PX, nonce: Date.now() };
+        else if (e.key === 'ArrowDown')  cmd = { kind: 'panBy', dx: 0, dy:  PAN_PX, nonce: Date.now() };
+        else if (e.key === 'ArrowLeft')  cmd = { kind: 'panBy', dx: -PAN_PX, dy: 0, nonce: Date.now() };
+        else if (e.key === 'ArrowRight') cmd = { kind: 'panBy', dx:  PAN_PX, dy: 0, nonce: Date.now() };
+        else if (e.key === '+' || e.key === '=') cmd = { kind: 'zoomBy', factor: 1.5, nonce: Date.now() };
+        else if (e.key === '-')                  cmd = { kind: 'zoomBy', factor: 1 / 1.5, nonce: Date.now() };
+        else if (e.key === '0')                  cmd = { kind: 'reset', nonce: Date.now() };
+        if (cmd) {
+          e.preventDefault();
+          setMapZoomCommand(cmd);
+          return;
+        }
+      }
+
+      // Existing undo/redo (cmd+z, cmd+shift+z, cmd+y)
+      const withCmdKey = e.metaKey || e.ctrlKey;
+      if (!withCmdKey) return;
+      if (e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        undoGeoOp();
+      } else if ((e.key === 'z' && e.shiftKey) || e.key === 'y') {
+        e.preventDefault();
+        redoGeoOp();
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [
+    paintGeo, eraserActive, helpOpen, selectionCount,
+    setActivePaintGeo, setActiveEraser, undoGeoOp, redoGeoOp,
+    clearSelection, setMapZoomCommand,
+  ]);
+
+  const router = useRouter();
+
+  async function handleSignOut() {
+    await logout();
+    router.replace('/login');
+  }
 
   return (
-    <header className="flex items-center gap-3 border-b border-zinc-200 bg-white px-4 py-2.5 dark:border-zinc-700 dark:bg-zinc-950">
-      {/* Logo + deep-link to admin */}
-      <span className="text-sm font-bold text-zinc-800 dark:text-zinc-100">
-        Sales Deployment
-      </span>
-      <div className="flex items-center rounded-lg border border-zinc-200 p-0.5 text-xs dark:border-zinc-700">
-        <span className="rounded-md bg-zinc-900 px-2.5 py-1 font-medium text-white dark:bg-zinc-100 dark:text-zinc-900">
-          Territory
-        </span>
-        <a
-          href={manageAccountsUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-1 rounded-md px-2.5 py-1 font-medium text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
-          title="Manage accounts in Directus (opens new tab)"
+    <header className="relative flex flex-wrap items-center gap-3 border-b border-hairline bg-canvas/80 px-5 py-3 backdrop-blur-md">
+      {/* Brand mark */}
+      <Link href="/territory" className="group inline-flex items-center gap-2">
+        <span
+          aria-hidden="true"
+          className="grid h-6 w-6 place-items-center rounded-[7px] bg-gradient-to-br from-brand to-brand-ink text-white shadow-brand"
         >
-          Manage Accounts
-          <svg className="h-2.5 w-2.5" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true">
-            <path d="M3 0v1h4.293L0 8.293 1.707 10 9 2.707V7h1V0H3z" />
+          <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="currentColor">
+            <path d="M3 12.5V4.2c0-.4.2-.7.6-.9l4-2.1c.3-.1.5-.1.7 0l4 2.1c.4.2.6.5.6.9v8.3l-2-1V5L8 3.4 5 5v8.5l-2-1z" />
           </svg>
-        </a>
-      </div>
+        </span>
+        <span className="display text-[15px] font-semibold tracking-tight text-ink transition-colors group-hover:text-brand">
+          Vegeta
+        </span>
+        <span className="hidden h-3.5 w-px bg-hairline-strong sm:block" aria-hidden="true" />
+        <span className="hidden text-[11px] font-medium uppercase tracking-[0.14em] text-ink-faint sm:block">
+          Sales Deployment
+        </span>
+      </Link>
+
+      <WorkspaceSwitcher />
+
+      {/* Primary nav */}
+      <nav className="ml-1 flex items-center gap-0.5 rounded-[10px] border border-hairline bg-sunken/70 p-0.5">
+        <span className={navActive}>Territory</span>
+        <Link href="/accounts" className={navLink}>{entityPlural}</Link>
+        {navModules.filter((m) => m.key !== 'territory').map((m) => (
+          <Link key={m.key} href={m.navHref} className={navLink}>{m.navLabel}</Link>
+        ))}
+      </nav>
 
       {/* Breadcrumb */}
-      <nav className="flex items-center gap-1 text-sm text-zinc-500">
+      <nav className="flex items-center gap-1 text-[12px]" aria-label="Map breadcrumb">
         <button
           onClick={() => setDrillDownCountryCode(null)}
-          className={`rounded px-1.5 py-0.5 transition-colors hover:text-zinc-800 dark:hover:text-zinc-200 ${
-            !drillDownCode ? 'font-semibold text-zinc-800 dark:text-zinc-100' : ''
+          className={`rounded-md px-1.5 py-0.5 transition-colors hover:text-ink ${
+            !drillDownCode ? 'font-semibold text-ink' : 'text-ink-muted'
           }`}
         >
           World
         </button>
         {drillDownCode && drillDownCountryName && (
           <>
-            <span className="text-zinc-300 dark:text-zinc-600">/</span>
-            <span className="rounded px-1.5 py-0.5 font-semibold text-zinc-800 dark:text-zinc-100">
+            <span className="text-indigo-400/70" aria-hidden="true">›</span>
+            <span className="rounded-md px-1.5 py-0.5 font-semibold text-ink">
               {drillDownCountryName}
             </span>
           </>
         )}
       </nav>
 
+      {paintGeo && (
+        <div
+          className="inline-flex items-center gap-2 rounded-full border border-brand/30 bg-brand-soft px-2.5 py-1 text-[11px] font-medium text-brand-ink"
+          title="Active paint mode — click countries on the map to assign them"
+        >
+          <span
+            className="inline-block h-2.5 w-2.5 rounded-full ring-1 ring-black/10"
+            style={{ background: paintGeo.color ?? 'transparent' }}
+          />
+          <span>Painting <span className="font-semibold">{paintGeo.name}</span></span>
+          <button
+            onClick={() => setActivePaintGeo(null)}
+            className="rounded-full p-0.5 transition-colors hover:bg-brand/15"
+            title="Stop painting (Esc)"
+            aria-label="Stop painting"
+          >
+            <svg className="h-3 w-3" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z" />
+            </svg>
+          </button>
+        </div>
+      )}
+      {eraserActive && (
+        <div
+          className="inline-flex items-center gap-2 rounded-full border border-amber-300/70 bg-accent-soft px-2.5 py-1 text-[11px] font-medium text-amber-800 dark:text-amber-200"
+          title="Eraser mode — click countries on the map to clear their assignment"
+        >
+          <svg className="h-3 w-3" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M9.05 1.05a3 3 0 014.24 0l1.66 1.66a3 3 0 010 4.24L7.7 14.2A3 3 0 015.58 15H2a1 1 0 01-1-1v-3.58A3 3 0 011.8 8.3l7.25-7.25z" />
+          </svg>
+          <span>Erasing</span>
+          <button
+            onClick={() => setActiveEraser(false)}
+            className="rounded-full p-0.5 transition-colors hover:bg-amber-500/15"
+            title="Stop erasing (Esc)"
+            aria-label="Stop erasing"
+          >
+            <svg className="h-3 w-3" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z" />
+            </svg>
+          </button>
+        </div>
+      )}
+      {!paintGeo && !eraserActive && (
+        <button
+          onClick={() => setActiveEraser(true)}
+          className={ghostBtn}
+          title="Eraser — click countries to clear their Geo assignment"
+        >
+          <svg className="h-3 w-3" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M9.05 1.05a3 3 0 014.24 0l1.66 1.66a3 3 0 010 4.24L7.7 14.2A3 3 0 015.58 15H2a1 1 0 01-1-1v-3.58A3 3 0 011.8 8.3l7.25-7.25z" />
+          </svg>
+          Erase
+        </button>
+      )}
+      {!paintGeo && !eraserActive && (
+        <button
+          onClick={() => setActiveSelect(!selectActive)}
+          className={`${ghostBtn}${selectActive ? ' border-brand/40 bg-brand-soft text-brand-ink' : ''}`}
+          title={selectActive ? 'Exit select mode (Esc)' : 'Multi-select regions'}
+          aria-pressed={selectActive}
+        >
+          <svg className="h-3 w-3" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M2 2l4.5 11 2-4.5L13 6.5 2 2z" />
+          </svg>
+          Select
+        </button>
+      )}
+
+      <button
+        type="button"
+        onClick={() => setHelpOpen((v) => !v)}
+        className="ml-1 inline-flex h-6 w-6 items-center justify-center rounded-full border border-hairline text-[11px] font-semibold text-ink-muted hover:text-ink"
+        aria-label="Keyboard shortcuts"
+        aria-expanded={helpOpen}
+        title="Keyboard shortcuts (?)"
+      >
+        ?
+      </button>
+
+      {/* Undo / redo */}
+      <div className="flex items-center gap-0.5 rounded-md border border-hairline bg-panel/60 p-0.5">
+        <button
+          onClick={undoGeoOp}
+          disabled={!canUndo}
+          className="flex h-6 w-6 items-center justify-center rounded text-ink-muted transition-colors hover:bg-sunken hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
+          title="Undo (⌘Z)"
+          aria-label="Undo"
+        >
+          <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M5.78 3.22a.75.75 0 010 1.06L3.81 6.25H8.5a4.5 4.5 0 010 9H4.75a.75.75 0 010-1.5H8.5a3 3 0 100-6H3.81l1.97 1.97a.75.75 0 01-1.06 1.06L1.47 7.53a.75.75 0 010-1.06l3.25-3.25a.75.75 0 011.06 0z" />
+          </svg>
+        </button>
+        <button
+          onClick={redoGeoOp}
+          disabled={!canRedo}
+          className="flex h-6 w-6 items-center justify-center rounded text-ink-muted transition-colors hover:bg-sunken hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
+          title="Redo (⇧⌘Z)"
+          aria-label="Redo"
+        >
+          <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M10.22 3.22a.75.75 0 011.06 0l3.25 3.25a.75.75 0 010 1.06l-3.25 3.25a.75.75 0 11-1.06-1.06l1.97-1.97H7.5a3 3 0 100 6h3.75a.75.75 0 010 1.5H7.5a4.5 4.5 0 010-9h4.69l-1.97-1.97a.75.75 0 010-1.06z" />
+          </svg>
+        </button>
+      </div>
+
       <div className="flex-1" />
 
       {/* Map theme picker */}
-      <div className="flex items-center gap-1" title="Map theme">
+      <div className="flex items-center gap-1 rounded-md border border-hairline bg-panel/60 p-0.5" title="Map theme">
         {THEME_ORDER.map((id) => {
           const t = MAP_THEMES[id];
           const isActive = activeTheme.id === id;
@@ -86,15 +315,15 @@ export default function Toolbar({ drillDownCountryName }: ToolbarProps) {
               onClick={() => setMapTheme(id)}
               title={t.label}
               aria-label={`Switch to ${t.label} theme`}
-              className={`flex h-6 w-6 items-center justify-center rounded-md border transition-all ${
+              className={`relative grid h-5 w-5 place-items-center rounded transition-all ${
                 isActive
-                  ? 'border-blue-500 ring-2 ring-blue-300 ring-offset-1 dark:ring-offset-zinc-950'
-                  : 'border-zinc-200 hover:border-zinc-400 dark:border-zinc-700'
+                  ? 'ring-2 ring-brand ring-offset-1 ring-offset-panel'
+                  : 'ring-1 ring-hairline-strong hover:ring-ink-muted'
               }`}
               style={{ background: t.previewBg }}
             >
               <span
-                className="h-3.5 w-3.5 rounded-sm"
+                className="h-3 w-3 rounded-sm"
                 style={{ background: `linear-gradient(135deg, ${t.previewOcean} 50%, ${t.previewLand} 50%)` }}
               />
             </button>
@@ -102,29 +331,25 @@ export default function Toolbar({ drillDownCountryName }: ToolbarProps) {
         })}
       </div>
 
-      {/* Account display controls (read-only UI state) */}
+      {/* Account display controls */}
       {accountOrder.length > 0 && (
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1.5">
           <span
-            className="flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
-            title="Accounts loaded from Directus"
+            className="inline-flex items-center gap-1.5 rounded-md border border-hairline bg-panel/60 px-2 py-1.5 text-[11px] font-medium text-ink-body"
+            title={`${entityPlural} loaded`}
           >
-            <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+            <svg className="h-3.5 w-3.5 text-ink-muted" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
               <path d="M8 8a3 3 0 100-6 3 3 0 000 6zM14 14s1 0 1-1-1-4-7-4-7 3-7 4 1 1 1 1h12z" />
             </svg>
-            Accounts
-            <span className="rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700 dark:bg-blue-900 dark:text-blue-300">
+            <span>{entityPlural}</span>
+            <span className="rounded-full bg-brand-soft px-1.5 py-0.5 font-mono text-[10px] font-semibold tabular-nums text-brand-ink">
               {accountOrder.length}
             </span>
           </span>
           <button
             onClick={toggleShowAccounts}
             title={showAccounts ? 'Hide accounts on map' : 'Show accounts on map'}
-            className={`flex h-7 w-7 items-center justify-center rounded-lg border transition-colors ${
-              showAccounts
-                ? 'border-blue-300 bg-blue-50 text-blue-600 dark:border-blue-700 dark:bg-blue-950 dark:text-blue-400'
-                : 'border-zinc-200 bg-white text-zinc-400 dark:border-zinc-700 dark:bg-zinc-800'
-            }`}
+            className={`${iconBtn} ${showAccounts ? 'border-brand/40 bg-brand-soft text-brand' : ''}`}
           >
             <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="currentColor">
               {showAccounts
@@ -139,7 +364,7 @@ export default function Toolbar({ drillDownCountryName }: ToolbarProps) {
               onChange={(e) => setMapAccountMetric(e.target.value)}
               title="Map metric"
               aria-label="Map metric"
-              className="rounded-lg border border-zinc-200 bg-white py-1 pl-2 pr-6 text-xs text-zinc-600 outline-none focus:border-blue-400 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+              className="appearance-none rounded-md border border-hairline bg-panel/60 py-1.5 pl-2.5 pr-7 text-[11px] font-medium text-ink-body outline-none transition-colors hover:border-hairline-strong hover:bg-panel focus:border-brand/60 focus:ring-2 focus:ring-brand/20 [background-image:url('data:image/svg+xml;utf8,<svg%20xmlns=%22http://www.w3.org/2000/svg%22%20width=%2210%22%20height=%2210%22%20viewBox=%220%200%2010%2010%22><path%20d=%22M2%204l3%203%203-3%22%20stroke=%22%2397a0b3%22%20stroke-width=%221.4%22%20fill=%22none%22%20stroke-linecap=%22round%22%20stroke-linejoin=%22round%22/></svg>')] [background-position:right_0.5rem_center] [background-repeat:no-repeat] [background-size:10px_10px]"
             >
               <option value="count">Count</option>
               {metricFields.map((f) => (
@@ -150,35 +375,44 @@ export default function Toolbar({ drillDownCountryName }: ToolbarProps) {
         </div>
       )}
 
+      {/* Labels toggle */}
+      <button
+        type="button"
+        onClick={toggleShowLabels}
+        className={`inline-flex h-7 w-7 items-center justify-center rounded-md border border-hairline ${showLabels ? 'bg-brand-soft text-brand' : 'bg-panel hover:bg-canvas'}`}
+        aria-label={showLabels ? 'Hide labels' : 'Show labels'}
+        aria-pressed={showLabels}
+      >
+        <svg viewBox="0 0 16 16" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+          {showLabels ? (
+            <>
+              <ellipse cx="8" cy="8" rx="6" ry="3.5" />
+              <circle cx="8" cy="8" r="1.4" fill="currentColor" stroke="none" />
+            </>
+          ) : (
+            <>
+              <path d="M2 8c1.5-2 3.5-3 6-3 1 0 1.9.15 2.7.4" />
+              <path d="M14 8c-1.4 1.9-3.3 2.9-5.7 3" />
+              <path d="M3 3l10 10" />
+            </>
+          )}
+        </svg>
+      </button>
+
       {/* View toggle */}
-      <div className="flex rounded-lg border border-zinc-200 p-0.5 dark:border-zinc-700">
-        <button
-          onClick={() => setActiveView('map')}
-          className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-            activeView === 'map'
-              ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
-              : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
-          }`}
-        >
-          <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="currentColor">
-            <path d="M0 2.75C0 1.784.784 1 1.75 1h12.5c.966 0 1.75.784 1.75 1.75v10.5A1.75 1.75 0 0114.25 15H1.75A1.75 1.75 0 010 13.25V2.75zm1.75-.25a.25.25 0 00-.25.25v10.5c0 .138.112.25.25.25h12.5a.25.25 0 00.25-.25V2.75a.25.25 0 00-.25-.25H1.75z" />
-          </svg>
-          Map
-        </button>
-        <button
-          onClick={() => setActiveView('spreadsheet')}
-          className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-            activeView === 'spreadsheet'
-              ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
-              : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
-          }`}
-        >
-          <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="currentColor">
-            <path d="M0 1.75C0 .784.784 0 1.75 0h12.5C15.216 0 16 .784 16 1.75v12.5A1.75 1.75 0 0114.25 16H1.75A1.75 1.75 0 010 14.25V1.75zM1.5 5.25v9a.25.25 0 00.25.25H5.5V5.25H1.5zm5.5 0v9.25h7.75a.25.25 0 00.25-.25v-9H7zM5.5 3.75H1.5v-.25L1.75 1.5h3.75v2.25zm1.5 0V1.5h7.25l.25 2V3.75H7z" />
-          </svg>
-          Spreadsheet
-        </button>
+      <div className="flex items-center gap-0.5 rounded-[10px] border border-hairline bg-sunken/70 p-0.5">
+        <button onClick={() => setActiveView('map')} className={activeView === 'map' ? navActive : navLink}>Map</button>
+        <button onClick={() => setActiveView('spreadsheet')} className={activeView === 'spreadsheet' ? navActive : navLink}>Sheet</button>
       </div>
+
+      <button
+        onClick={handleSignOut}
+        className={ghostBtn}
+        title="Sign out"
+      >
+        Sign out
+      </button>
+      <MapHelpPopover open={helpOpen} onClose={() => setHelpOpen(false)} />
     </header>
   );
 }

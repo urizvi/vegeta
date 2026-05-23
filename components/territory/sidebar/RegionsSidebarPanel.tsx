@@ -32,7 +32,7 @@ export default function RegionsSidebarPanel() {
       <div className="flex-1 overflow-y-auto p-3 space-y-2">
         {regionOrder.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-center">
-            <p className="text-sm text-zinc-400">No regions defined.</p>
+            <p className="text-sm text-slate-400">No regions defined.</p>
           </div>
         ) : (
           regionOrder.map((rid) => {
@@ -46,13 +46,13 @@ export default function RegionsSidebarPanel() {
             return (
               <div
                 key={rid}
-                className="rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-900"
+                className="rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900"
               >
                 {/* Region header */}
                 <div className="flex items-center gap-2 px-3 py-2.5">
                   <button
                     onClick={() => setExpandedId(isExpanded ? null : rid)}
-                    className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded text-zinc-400 hover:text-zinc-600"
+                    className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded text-slate-400 hover:text-slate-600"
                     aria-label={isExpanded ? 'Collapse' : 'Expand'}
                   >
                     <svg
@@ -63,16 +63,16 @@ export default function RegionsSidebarPanel() {
                     </svg>
                   </button>
 
-                  <span className="flex-1 truncate text-sm font-semibold text-zinc-800 dark:text-zinc-100">
+                  <span className="flex-1 truncate text-sm font-semibold text-slate-800 dark:text-slate-100">
                     {region.name}
                   </span>
 
-                  <span className="text-xs text-zinc-400">{region.countryCodes.length} countries</span>
+                  <span className="text-xs text-slate-400">{region.countryCodes.length} countries</span>
 
                   {/* Edit countries */}
                   <button
                     onClick={() => setEditCountriesFor(region)}
-                    className="flex h-6 w-6 items-center justify-center rounded text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800"
+                    className="flex h-6 w-6 items-center justify-center rounded text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"
                     title="Edit countries"
                     aria-label="Edit countries"
                   >
@@ -84,9 +84,9 @@ export default function RegionsSidebarPanel() {
 
                 {/* Subregions */}
                 {isExpanded && (
-                  <div className="border-t border-zinc-100 dark:border-zinc-800">
+                  <div className="border-t border-slate-100 dark:border-slate-800">
                     {childSubregions.length === 0 ? (
-                      <p className="px-4 py-2 text-xs text-zinc-400">No subregions yet.</p>
+                      <p className="px-4 py-2 text-xs text-slate-400">No subregions yet.</p>
                     ) : (
                       childSubregions.map((sub) => {
                         if (!sub) return null;
@@ -94,23 +94,23 @@ export default function RegionsSidebarPanel() {
                         return (
                           <div
                             key={sub.id}
-                            className="flex flex-col gap-1.5 border-b border-zinc-50 px-3 py-2.5 last:border-0 dark:border-zinc-800"
+                            className="flex flex-col gap-1.5 border-b border-slate-50 px-3 py-2.5 last:border-0 dark:border-slate-800"
                           >
                             {/* Subregion row */}
                             <div className="flex items-center gap-2">
                               {/* Color dot showing current team */}
                               <span
-                                className="h-2.5 w-2.5 flex-shrink-0 rounded-full border border-zinc-200"
+                                className="h-2.5 w-2.5 flex-shrink-0 rounded-full border border-slate-200"
                                 style={{ backgroundColor: assignedTeam?.color ?? '#d1d5db' }}
                               />
-                              <span className="flex-1 truncate text-sm font-medium text-zinc-700 dark:text-zinc-200">
+                              <span className="flex-1 truncate text-sm font-medium text-slate-700 dark:text-slate-200">
                                 {sub.name}
                               </span>
-                              <span className="text-xs text-zinc-400">{sub.stateCodes.length} states</span>
+                              <span className="text-xs text-slate-400">{sub.stateCodes.length} states</span>
                               {/* Delete */}
                               <button
                                 onClick={() => removeSubregion(sub.id)}
-                                className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded text-zinc-300 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950"
+                                className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded text-slate-300 hover:bg-rose-50 hover:text-rose-500 dark:hover:bg-rose-950"
                                 aria-label="Delete subregion"
                               >
                                 <svg className="h-3 w-3" viewBox="0 0 16 16" fill="currentColor">
@@ -124,7 +124,7 @@ export default function RegionsSidebarPanel() {
                               <select
                                 value={sub.teamId ?? ''}
                                 onChange={(e) => assignSubregionToTeam(sub.id, e.target.value || null)}
-                                className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-1 pl-2 pr-6 text-xs text-zinc-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
+                                className="w-full rounded-lg border border-slate-200 bg-slate-50 py-1 pl-2 pr-6 text-xs text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
                               >
                                 <option value="">Unassigned</option>
                                 {teamOrder.map((tid) => {
@@ -146,7 +146,7 @@ export default function RegionsSidebarPanel() {
                     {/* Add subregion */}
                     <button
                       onClick={() => setAddSubregionFor(region)}
-                      className="flex w-full items-center gap-1.5 px-4 py-2.5 text-xs text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950"
+                      className="flex w-full items-center gap-1.5 px-4 py-2.5 text-xs text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-950"
                     >
                       <svg className="h-3 w-3" viewBox="0 0 16 16" fill="currentColor">
                         <path d="M8 0a.75.75 0 01.75.75v6.5h6.5a.75.75 0 010 1.5h-6.5v6.5a.75.75 0 01-1.5 0v-6.5H.75a.75.75 0 010-1.5h6.5V.75A.75.75 0 018 0z" />

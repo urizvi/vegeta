@@ -1,48 +1,46 @@
+import { getCurrentWorkspaceId } from '@/lib/workspace';
 import type { Account } from '@/types/account';
-import type { FieldDefinition, FieldType } from '@/lib/accountFields';
+import type { GeoNode, SalesTeam, Member, HierarchyLevelDef, PipelineStage } from '@/types/territory';
+import type { Contact, Activity, Task } from '@/types/crm';
+import type { FieldDefinition } from '@/lib/accountFields';
+import {
+  rowToAccount,
+  rowToFieldDef,
+  rowToGeoNode,
+  rowToTeam,
+  rowToMember,
+  rowToLevel,
+  rowToStage,
+  rowToContact,
+  rowToActivity,
+  rowToTask,
+  type AccountRow,
+  type FieldDefRow,
+  type GeoNodeRow,
+  type LevelRow,
+  type MemberRow,
+  type PipelineStageRow,
+  type TeamRow,
+  type ContactRow,
+  type ActivityRow,
+  type TaskRow,
+} from '@/lib/directus-mappers';
 
 const BASE_URL = process.env.NEXT_PUBLIC_DIRECTUS_URL;
-const TOKEN = process.env.NEXT_PUBLIC_DIRECTUS_TOKEN;
 
 /** Public deep-link base for the Directus admin UI (toolbar "Manage Accounts" link). */
 export const DIRECTUS_ADMIN_URL =
   process.env.NEXT_PUBLIC_DIRECTUS_ADMIN_URL ?? `${BASE_URL ?? ''}/admin`;
 
-// ── Row shapes (Directus REST snake_case) ────────────────────────────────
-
-interface AccountRow {
-  id: string;
-  name: string;
-  country: string;
-  state: string | null;
-  rep_id: string | null;
-  fields: Record<string, string | number> | null;
-}
-
-interface FieldDefRow {
-  id: string;
-  label: string;
-  type: FieldType;
-  options: string[] | null;
-  is_currency: boolean | null;
-  sort: number | null;
-}
-
-interface MemberRow {
-  id: string;
-  name: string;
-  team_id: string | null;
-}
-
-// ── Low-level request ─────────────────────────────────────────────────────
-
 async function fetchItems<T>(collection: string): Promise<T[]> {
   if (!BASE_URL) throw new Error('NEXT_PUBLIC_DIRECTUS_URL is not set');
-  if (!TOKEN) throw new Error('NEXT_PUBLIC_DIRECTUS_TOKEN is not set');
-  const res = await fetch(`${BASE_URL}/items/${collection}?limit=-1`, {
-    headers: { Authorization: `Bearer ${TOKEN}` },
+  const wid = await getCurrentWorkspaceId();
+  const url = `${BASE_URL}/items/${collection}?limit=-1&filter[workspace_id][_eq]=${encodeURIComponent(wid)}`;
+  const res = await fetch(url, {
+    credentials: 'include',
     cache: 'no-store',
   });
+  if (res.status === 401) throw new Error('Not authenticated');
   if (!res.ok) {
     throw new Error(`Directus ${collection}: ${res.status} ${res.statusText}`);
   }
@@ -50,18 +48,9 @@ async function fetchItems<T>(collection: string): Promise<T[]> {
   return json.data;
 }
 
-// ── Typed loaders ─────────────────────────────────────────────────────────
-
 export async function getAccounts(): Promise<Account[]> {
   const rows = await fetchItems<AccountRow>('accounts');
-  return rows.map((r) => ({
-    id: r.id,
-    name: r.name,
-    country: r.country,
-    state: r.state ?? undefined,
-    repId: r.rep_id,
-    fields: r.fields ?? {},
-  }));
+  return rows.map(rowToAccount);
 }
 
 export async function getFieldDefinitions(): Promise<FieldDefinition[]> {
@@ -69,17 +58,64 @@ export async function getFieldDefinitions(): Promise<FieldDefinition[]> {
   return rows
     .slice()
     .sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0))
-    .map((r) => ({
-      id: r.id,
-      label: r.label,
-      type: r.type,
-      ...(r.options ? { options: r.options } : {}),
-      ...(r.is_currency ? { isCurrency: true } : {}),
-    }));
+    .map(rowToFieldDef);
 }
 
-/** Members mirror — only used to keep the Next store's members map populated for reads. */
-export async function getMembers(): Promise<Array<{ id: string; name: string; teamId: string | null }>> {
+export async function getMembers(): Promise<Array<Member & { teamId: string | null }>> {
   const rows = await fetchItems<MemberRow>('members');
-  return rows.map((r) => ({ id: r.id, name: r.name, teamId: r.team_id }));
+  return rows.map((r) => ({ ...rowToMember(r), teamId: r.team_id }));
+}
+
+export async function getPipelineStages(): Promise<{ stages: PipelineStage[]; order: string[] }> {
+  const rows = await fetchItems<PipelineStageRow>('pipeline_stages');
+  const sorted = rows.slice().sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0));
+  return {
+    stages: sorted.map(rowToStage),
+    order: sorted.map((r) => r.id),
+  };
+}
+
+export async function getHierarchyLevels(): Promise<{ levels: HierarchyLevelDef[]; order: string[] }> {
+  const rows = await fetchItems<LevelRow>('hierarchy_levels');
+  const sorted = rows.slice().sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0));
+  return {
+    levels: sorted.map(rowToLevel),
+    order: sorted.map((r) => r.id),
+  };
+}
+
+export async function getTeams(): Promise<{ teams: SalesTeam[]; order: string[] }> {
+  const rows = await fetchItems<TeamRow>('teams');
+  const sorted = rows.slice().sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0));
+  return {
+    teams: sorted.map(rowToTeam),
+    order: sorted.map((r) => r.id),
+  };
+}
+
+export async function getContacts(): Promise<Contact[]> {
+  const rows = await fetchItems<ContactRow>('contacts');
+  return rows
+    .slice()
+    .sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0))
+    .map(rowToContact);
+}
+
+export async function getActivities(): Promise<Activity[]> {
+  const rows = await fetchItems<ActivityRow>('activities');
+  return rows.map(rowToActivity);
+}
+
+export async function getTasks(): Promise<Task[]> {
+  const rows = await fetchItems<TaskRow>('tasks');
+  return rows.map(rowToTask);
+}
+
+export async function getGeoNodes(): Promise<{ nodes: GeoNode[]; order: string[] }> {
+  const rows = await fetchItems<GeoNodeRow>('geo_nodes');
+  const sorted = rows.slice().sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0));
+  return {
+    nodes: sorted.map(rowToGeoNode),
+    order: sorted.map((r) => r.id),
+  };
 }
