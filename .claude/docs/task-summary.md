@@ -2133,3 +2133,34 @@ Key decisions locked during brainstorm:
 - **Testing:** layers 1 (`lib/formula/*` units) and 2 (store integration) land with the feature; layer 3 (FormulaEditor component tests) introduces the UI-test pattern or defers.
 
 Next: write the implementation plan once the user has reviewed and approved the spec.
+
+---
+
+## 2026-05-22 — Computed-fields feature implementation complete (CRM evolution sub-project A)
+
+22-task implementation plan executed end-to-end via subagent-driven-development. Plus 5 follow-up commits resolving every IMPORTANT finding from the final code review. Branch: `accounts-crud` → merging to `main`.
+
+### What shipped
+
+- **`lib/formula/*` foundation** (6 modules + tests): `ast.ts`, `parse.ts`, `evaluate.ts`, `typeCheck.ts`, `recompute.ts`, `simpleForm.ts`, plus `evalErrorMessage.ts` added during review-fix. Pure evaluator with strict type rules, short-circuit semantics, missing-value propagation; Kahn's-algorithm topological order + cycle detection; round-trip Simple ↔ Advanced via canonical AST. Field refs are by stable `id`, not label (non-negotiable).
+- **Schema widening** (`lib/accountFields.ts`, `types/account.ts`, `lib/directus-mappers.ts`): `FieldType` gained `'computed'`; `ComputedOutput = 'number' | 'text' | 'boolean'`; `Account.fields` widened to `Record<string, string | number | boolean>`. Boolean rendered as `✓ / ✗ / —` (distinct from each other). `formatFieldValue`'s historic `≤0 → '—'` guard for metrics replaced with finite-number guard (computed metrics can legitimately be 0 or negative).
+- **Directus columns** (out-of-band, documented at `docs/superpowers/notes/2026-05-19-field-defs-columns.md`): `output_type`, `formula_source`, `formula_form`, `formula_ast` — all nullable.
+- **Store wiring** (`store/slices/accountsSlice.ts`): `recomputeAccount` tail in `addAccount`, `updateAccount`, `setAccountField`, `importAccounts`, `addFieldDef`, `updateFieldDef`, `removeFieldDef`. **Data-loss bug fixed during review**: `refreshAllAccountsForComputed` no longer sweeps orphan non-computed keys (was clobbering the existing "delete field but keep data" flow). `removeFieldDef` on a computed field now explicitly cleans that key out of every account.
+- **FormulaEditor** (`components/accounts/formula/*`): two-mode editor — Simple (three shapes: arithmetic combinator / bucket-tier / boolean flag) + Advanced (textarea with `{` autocomplete, inline error markers with "did you mean" suggestions, debounced live preview). Save-gate validates parse, type inference, declared-vs-inferred output match, cycle detection. ConvertOutputDialog **persists immediately** via `onSave` before updating local state (review fix); workspace backfill fires on confirm, not on subsequent Save. `tooComplex` banner derives from the live draft AST, not the saved formula; Advanced → Simple transitions recover SimpleFormConfig via `astToSimple` when possible.
+- **Surfaces**: AccountsTable (ƒ glyph in computed column headers; boolean rendering; derived distinct-value filter pills for text outputs; tri-state All/True/False pill for boolean outputs; per-error-code tooltips on errored `—` cells via shared `evalErrorMessage` helper); KanbanBoard (text-output computed allowed as Group-by when ≤12 observed values; drag-to-move disabled with amber banner); AddEditAccountModal (live read-only preview rows with `evaluate`-against-draft and error tooltips); CSV import (computed fields excluded from target dropdown, surfaced in "Skipped — computed field" group); CSV export at `lib/accountsCsvExport.ts` (ƒ-prefixed headers, boolean escaped as true/false strings); OverviewTab detail page (ƒ badge for computed fields); ManageFieldsModal (Computed type option in dropdown, embedded editor, broken-ref red dot via `collectFieldRefs`, dismissible amber warning when categorical option referenced by a computed formula is removed).
+- **Tests**: 112 passing across 18 files. Pure `lib/formula/*` units (Layer 1 per spec). Store integration tests covering `setAccountField`, `addFieldDef` (computed backfills all accounts), `removeFieldDef` (both computed-key cleanup and orphan-preservation for non-computed deletes), `importAccounts` batched recompute (Layer 2 per spec).
+
+### Limitations / out-of-band
+
+- The four `field_definitions` Directus columns (`output_type`, `formula_source`, `formula_form`, `formula_ast`) still need to be added in the Directus admin UI before the feature works against real data. Documented at `docs/superpowers/notes/2026-05-19-field-defs-columns.md`. Mappers and store wiring are ready.
+- The manual smoke matrix (Task 21 step 2 in the plan: create/edit/delete formulas, cycle detection, conversion, import/export round-trip, disabled-drag Kanban banner, broken-ref red dot, categorical-option-removal warning) is left for human walkthrough against the dev server.
+- Workspace-backfill progress toast (spec mention for large workspaces) not implemented — low impact at current scale.
+- 3 territory-map files (`components/territory/map/{DrillDownMapView,MapHelpPopover,WorldMapView}.tsx`) have unrelated uncommitted modifications that predate this feature; left untouched throughout.
+
+### Spec compliance verdict (from final review)
+
+CHANGES REQUIRED → ALL 7 IMPORTANT findings resolved (commits `b23c1b3`, `d2d8c2a`, `f33d979`, `e5583fa`, `000e964`). 0 BLOCKERS at any point. 5 NITS deferred (dead `isFieldDefinitionComputed` export, etc.).
+
+### What unlocks next
+
+CRM evolution sub-projects B (field-type & schema upgrades), C (contacts first-class), D (activities timeline), E (saved views / bulk actions), F (audit log), G (automation). Plan was decomposed during brainstorm; specs not yet written for B–G. Computed fields was the foundation pass — schema widening + the recompute tail are reusable by B.
