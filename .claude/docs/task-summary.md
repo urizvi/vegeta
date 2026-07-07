@@ -2164,3 +2164,64 @@ CHANGES REQUIRED → ALL 7 IMPORTANT findings resolved (commits `b23c1b3`, `d2d8
 ### What unlocks next
 
 CRM evolution sub-projects B (field-type & schema upgrades), C (contacts first-class), D (activities timeline), E (saved views / bulk actions), F (audit log), G (automation). Plan was decomposed during brainstorm; specs not yet written for B–G. Computed fields was the foundation pass — schema widening + the recompute tail are reusable by B.
+
+---
+
+## 2026-05-22 — Directus columns added + smoke matrix started (computed-fields follow-up)
+
+Closing out the two limitations called out above ("Directus columns" + "manual smoke matrix").
+
+### Directus columns — DONE
+
+Extended `scripts/bootstrap-directus.mjs` to declare the four computed-fields columns on `field_definitions` (both in the `FIELD_DEFINITIONS_COLLECTION` definition for fresh bootstraps and as `tryCreateField` backfill calls for existing instances):
+
+- `output_type` (string, dropdown: number/text/boolean)
+- `formula_source` (text)
+- `formula_form` (json)
+- `formula_ast` (json)
+
+Ran bootstrap against the live Directus 11.3.5 at http://localhost:8055. Verified via `GET /fields/field_definitions` — all four columns present with correct types. Re-run is idempotent (logs `⟳ already exists — skipping`).
+
+### Bug fixed mid-smoke-test: mapper alias was dropping all four computed columns on write
+
+While walking the smoke matrix at the browser, step 1 (create computed formula) surfaced the symptom "field saves but no computed value populates." Root cause: `lib/directus-write.ts:18` was importing the legacy `fieldDefToRow` mapper under the alias `fieldDefToRowPatch`:
+
+```ts
+fieldDefToRow as fieldDefToRowPatch,  // wrong — legacy mapper only handled label/type/options/isCurrency/entity/aliases
+```
+
+The legacy mapper had **no awareness** of `output_type`, `formula_source`, `formula_form`, `formula_ast`. Both `createFieldDef` and `updateFieldDef` used the alias, so every computed-field write silently dropped all four columns. Field rows were persisted with `type='computed'` but `formula_ast=null`, so on next hydrate the evaluator had nothing to run.
+
+Tests didn't catch it because `store/slices/accountsSlice.computed.test.ts` mocks `directusWrite.createFieldDef` directly — the mapper path was never exercised in the suite.
+
+Fix:
+- `lib/directus-write.ts:18` — import the real `fieldDefToRowPatch` (no alias rename).
+- `lib/directus-mappers.ts` — deleted the now-dead legacy `fieldDefToRow` to prevent the import collision recurring.
+- `tsc --noEmit` + `npm test` (112/112 across 18 files) clean.
+
+Worth a follow-up integration test that exercises the actual mapper round-trip on write; not done yet.
+
+### Smoke matrix — 4 of 11 verified at browser, paused
+
+Walked at `http://localhost:3000` against live Directus:
+
+- ✅ 1. Create computed formula (Margin = TAM-SAM) — pass *after* the mapper fix
+- ✅ 2. Live preview in editor (Advanced mode round-trip, preview row updates per account)
+- ✅ 3. Cycle detection (Alias → {Margin}, then Margin → {Alias}+1 correctly blocked with "would create a cycle")
+- 🟡 4. Output-type conversion — in progress when paused
+- ⏳ 5. Boolean rendering (✓/✗/—)
+- ⏳ 6. Broken-ref red dot
+- ⏳ 7. Categorical-option-removal amber warning
+- ⏳ 8. Kanban disabled-drag banner
+- ⏳ 9. CSV export round-trip (ƒ-prefixed headers, boolean serialization)
+- ⏳ 10. CSV import excludes computed from target dropdown
+- ⏳ 11. Detail-page ƒ badge in OverviewTab
+
+Also caught mid-matrix: Directus JWT expires at 15 min and the app didn't auto-refresh — got a phantom "permission denied" creating Alias. Hard refresh resolved. Worth investigating whether `lib/directus-fetch.ts` (or wherever refresh lives) actually retries on 401; out of scope here.
+
+### Status of the two original limitations
+
+- **Directus columns** — RESOLVED (live + idempotent bootstrap).
+- **Manual smoke matrix** — PARTIAL (4/11). Resume by saying "resume smoke matrix"; checklist lives in conversation, not yet codified.
+
+Remaining limitations from 2026-05-22 entry unchanged: workspace-backfill progress toast not implemented; 3 territory-map files have pre-existing uncommitted modifications.

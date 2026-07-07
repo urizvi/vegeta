@@ -280,6 +280,36 @@ const FIELD_DEFINITIONS_COLLECTION = {
       },
     },
     {
+      field: 'output_type',
+      type: 'string',
+      meta: {
+        interface: 'select-dropdown',
+        note: 'Used when type = computed: declared output type of the formula',
+        options: {
+          choices: [
+            { text: 'Number',  value: 'number' },
+            { text: 'Text',    value: 'text' },
+            { text: 'Boolean', value: 'boolean' },
+          ],
+        },
+      },
+    },
+    {
+      field: 'formula_source',
+      type: 'text',
+      meta: { interface: 'input-multiline', note: 'Used when type = computed: raw formula text (Advanced mode source of truth)' },
+    },
+    {
+      field: 'formula_form',
+      type: 'json',
+      meta: { interface: 'input-code', options: { language: 'json' }, note: 'Used when type = computed: SimpleFormConfig when authored in Simple mode' },
+    },
+    {
+      field: 'formula_ast',
+      type: 'json',
+      meta: { interface: 'input-code', options: { language: 'json' }, note: 'Used when type = computed: parsed/canonical AST cached for evaluator' },
+    },
+    {
       field: 'sort',
       type: 'integer',
       meta: { interface: 'input', hidden: true },
@@ -1111,6 +1141,43 @@ async function main() {
       note: 'Lowercased CSV header strings that should auto-map to this field on import',
       options: { placeholder: 'e.g. "annual revenue"' },
     },
+  });
+
+  // Computed-fields feature (CRM evolution sub-project A, 2026-05-22).
+  // See docs/superpowers/notes/2026-05-19-field-defs-columns.md.
+  console.log('→ Ensuring field_definitions.output_type field');
+  await tryCreateField(token, 'field_definitions', {
+    field: 'output_type',
+    type: 'string',
+    meta: {
+      interface: 'select-dropdown',
+      note: 'Used when type = computed: declared output type of the formula',
+      options: {
+        choices: [
+          { text: 'Number',  value: 'number' },
+          { text: 'Text',    value: 'text' },
+          { text: 'Boolean', value: 'boolean' },
+        ],
+      },
+    },
+  });
+  console.log('→ Ensuring field_definitions.formula_source field');
+  await tryCreateField(token, 'field_definitions', {
+    field: 'formula_source',
+    type: 'text',
+    meta: { interface: 'input-multiline', note: 'Used when type = computed: raw formula text (Advanced mode source of truth)' },
+  });
+  console.log('→ Ensuring field_definitions.formula_form field');
+  await tryCreateField(token, 'field_definitions', {
+    field: 'formula_form',
+    type: 'json',
+    meta: { interface: 'input-code', options: { language: 'json' }, note: 'Used when type = computed: SimpleFormConfig when authored in Simple mode' },
+  });
+  console.log('→ Ensuring field_definitions.formula_ast field');
+  await tryCreateField(token, 'field_definitions', {
+    field: 'formula_ast',
+    type: 'json',
+    meta: { interface: 'input-code', options: { language: 'json' }, note: 'Used when type = computed: parsed/canonical AST cached for evaluator' },
   });
   // Backfill any null rows on existing instances.
   const orphanDefs = await api(token, 'GET', '/items/field_definitions?filter[entity][_null]=true&fields=id&limit=-1');

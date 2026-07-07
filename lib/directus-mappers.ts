@@ -241,17 +241,6 @@ export function memberToRow(
   return row;
 }
 
-export function fieldDefToRow(input: Partial<Omit<FieldDefinition, 'id'>>): Record<string, unknown> {
-  const patch: Record<string, unknown> = {};
-  if (input.label !== undefined) patch.label = input.label;
-  if (input.type !== undefined) patch.type = input.type;
-  if (input.options !== undefined) patch.options = input.options;
-  if (input.isCurrency !== undefined) patch.is_currency = input.isCurrency;
-  if (input.entity !== undefined) patch.entity = input.entity;
-  if (input.aliases !== undefined) patch.aliases = input.aliases;
-  return patch;
-}
-
 export function fieldDefToRowPatch(input: Partial<FieldDefinition>): Record<string, unknown> {
   const patch: Record<string, unknown> = {};
   if (input.label !== undefined)         patch.label = input.label;

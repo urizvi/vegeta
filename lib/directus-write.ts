@@ -15,7 +15,7 @@ import {
   rowToActivity,
   rowToTask,
   accountInputToRow as inputToRowPatch,
-  fieldDefToRow as fieldDefToRowPatch,
+  fieldDefToRowPatch,
   geoNodeToRow,
   teamToRow,
   memberToRow,
