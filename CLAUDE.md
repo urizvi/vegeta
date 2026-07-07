@@ -7,13 +7,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-npm run dev      # start dev server (Turbopack) at http://localhost:3000
-npm run build    # production build
-npm run start    # start production server
-npm run lint     # run ESLint
+npm run dev            # start dev server (Turbopack) at http://localhost:3000
+npm run build          # production build
+npm run start          # start production server
+npm run lint           # run ESLint
+npm test               # run Vitest suite once
+npm run test:watch     # Vitest in watch mode
+npm run test:coverage  # Vitest with coverage
 ```
 
-There is no test suite configured yet.
+## Direction
+
+The repo is on the `pivot/waferiq` branch as of 2026-07-06. The prior
+territory-planning + CRM direction is preserved at tag `v-territory`; the
+territory UI is parked under `legacy/` behind
+`NEXT_PUBLIC_LEGACY_TERRITORY_ENABLED`. New work targets the WaferIQ wedge
+(POS-recon or design-win funnel — gated on customer discovery). See
+`.claude/docs/task-summary.md` for the pivot entry and `.claude/docs/store-shape.md`
+for the pre-P2 store audit.
 
 ## Architecture
 

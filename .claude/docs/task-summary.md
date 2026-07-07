@@ -2225,3 +2225,87 @@ Also caught mid-matrix: Directus JWT expires at 15 min and the app didn't auto-r
 - **Manual smoke matrix** — PARTIAL (4/11). Resume by saying "resume smoke matrix"; checklist lives in conversation, not yet codified.
 
 Remaining limitations from 2026-05-22 entry unchanged: workspace-backfill progress toast not implemented; 3 territory-map files have pre-existing uncommitted modifications.
+
+---
+
+## 2026-07-06 — WaferIQ pivot: P0 decouple & stabilize
+
+The prior CRM evolution roadmap (Phase 1 multi-tenant Accounts shipped;
+Phases 2–4 planned) is **shelved**. The app is being repointed off
+territory planning onto **WaferIQ** — a daily-pain wedge for semiconductor
+distributors / design-win teams. The wedge itself (POS/sell-through
+reconciliation vs design-win funnel) is gated on customer discovery. Prior
+smoke-matrix work (7 unchecked items) is paused indefinitely.
+
+Six engineering phases planned: P0 decouple/stabilize (this batch), P1
+wedge-agnostic ingestion (safe to start next), then P2–P5 gated on the
+discovery decision. See `.claude/docs/store-shape.md` for the pre-P2 store
+audit produced this pass.
+
+### Git surface
+
+- Two closeout commits landed on `main` (Directus computed-fields column
+  bootstrap + mapper alias bug; territory-map RU/CA projection tuning) —
+  these clear the pre-existing dirty tree so v-territory captures real
+  state, not WIP.
+- Tag `v-territory` marks the final territory-era commit.
+- Branch `pivot/waferiq` cut off `v-territory`. All P0+ work lives here.
+
+### P0 changes on pivot/waferiq
+
+- `lib/legacyFlags.ts` — `isLegacyTerritoryEnabled()` reading
+  `NEXT_PUBLIC_LEGACY_TERRITORY_ENABLED`. Documented in
+  `.env.local.example`. Default OFF.
+- `git mv components/territory → legacy/components/territory` and
+  `git mv app/territory/TerritoryClient.tsx → legacy/app/TerritoryClient.tsx`.
+  Internal `@/components/territory/*` imports inside the moved tree
+  rewritten to `@/legacy/components/territory/*`.
+- `app/territory/page.tsx` recreated as a flag-gated proxy: `notFound()`
+  when flag off; dynamic import of the moved client when on. Preserves the
+  route surface without loading map libs on the critical path.
+- `app/page.tsx` root redirect changed from `/territory` → `/accounts`. As
+  long as the flag stays off, `react-simple-maps` + `d3-geo` never enter
+  the initial critical render path; they remain in `node_modules` and
+  importable from legacy.
+- Shared libs (`lib/territoryIndex.ts`, `lib/regionData.ts`,
+  `lib/geoTreeFilter.ts`, `lib/choropleth.ts`, `lib/geoUtils.ts`,
+  `hooks/useGeoData.ts`) NOT moved — consumed by non-territory surfaces
+  (accounts). Documented as a P2 pruning target in `store-shape.md`.
+- Store slices NOT reshaped — all 15 remain composed into
+  `useTerritoryStore`. `store-shape.md` documents each slice's fate under
+  WaferIQ (delete / reshape / keep) so P2 has a written map.
+- Empty shells created: `ingestion/`, `domain/`, `views/`, each with a
+  README stating the phase and intent.
+- `CLAUDE.md` updated: fixed stale "no test suite" claim; added pivot
+  status.
+- ESLint boundary rules in `eslint.config.mjs` NOT updated — the module
+  boundaries still target `components/territory/**` glob paths that no
+  longer contain code. `test/eslint-boundaries.test.ts` still passes
+  because it synthesizes fake file paths. **Follow-up:** either update the
+  rules to target the new legacy paths or drop them (they're guarding
+  code that's no longer active).
+
+### Harness state
+
+- `npx tsc --noEmit` clean.
+- `npm run lint` — 0 errors, 3 pre-existing warnings (all in the moved
+  DrillDownMapView / WorldMapView, `react-hooks/exhaustive-deps`).
+- `npm test` — 112/112 pass across 18 files.
+
+### What unlocks next
+
+- **P1 ingestion foundation.** Wedge-agnostic — safe to start under
+  `ingestion/` before discovery names the wedge. CSV/XLSX intake, column
+  mapping, canonical model, validation, Zustand persistence.
+- **Discovery.** Until it names the wedge, do not populate `domain/` or
+  `views/` — the P1→P2 gate is real per the plan.
+
+### Limitations / follow-ups
+
+- The 4 shelved smoke-matrix items (5–11) are officially deferred, not
+  resumed. The last-run state (4/11 verified against `Margin = TAM-SAM`)
+  is preserved above.
+- ESLint module boundaries need to be updated to reflect the new paths (or
+  dropped) — noted above.
+- Store still exposes 15 slices via `useTerritoryStore`; renaming +
+  pruning is a P2 task, not P0.

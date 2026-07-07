@@ -17,7 +17,7 @@ import type { MapThemeId } from '@/lib/mapThemes';
 import WorkspaceSwitcher from '@/components/WorkspaceSwitcher';
 import { useEntityNoun } from '@/hooks/useEntityNoun';
 import { useNavModules } from '@/hooks/useNavModules';
-import { MapHelpPopover } from '@/components/territory/map/MapHelpPopover';
+import { MapHelpPopover } from '@/legacy/components/territory/map/MapHelpPopover';
 import { isEditableTarget } from '@/lib/isEditableTarget';
 
 interface ToolbarProps {

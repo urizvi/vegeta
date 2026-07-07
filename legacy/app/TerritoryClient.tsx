@@ -7,7 +7,7 @@ import ModuleGate from '@/components/ModuleGate';
 // Skip SSR entirely — TerritoryApp uses Zustand (useSyncExternalStore) which
 // triggers "getServerSnapshot should be cached" during pre-rendering.
 const TerritoryApp = dynamic(
-  () => import('@/components/territory/TerritoryApp'),
+  () => import('@/legacy/components/territory/TerritoryApp'),
   { ssr: false },
 );
 
