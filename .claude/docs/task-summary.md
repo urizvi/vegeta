@@ -2309,3 +2309,116 @@ audit produced this pass.
   dropped) — noted above.
 - Store still exposes 15 slices via `useTerritoryStore`; renaming +
   pruning is a P2 task, not P0.
+
+---
+
+## 2026-07-06 — WaferIQ P1: wedge-agnostic ingestion foundation
+
+P1 lands the ingest-normalize-persist pipeline. Wedge-agnostic per the
+plan — no entity schemas yet (those are P2). Goal per the plan: "you can
+drop a real, messy file in and get a clean, validated dataset out."
+
+### Scope calls made up-front (not user-confirmed, defensible from plan)
+
+1. **New Zustand store** (`store/waferiqStore.ts`) rather than a slice on
+   the legacy `useTerritoryStore`. Matches the "separate store may be
+   cleaner" note in `store-shape.md`; keeps ingested datasets from
+   entangling with parked territory state. Future consolidation is
+   mechanical if we ever unify.
+2. **No target schema in P1.** Canonical model is loose: `Dataset` with
+   typed `Column`s and dynamic `Row`s. Column "mapping" = rename headers,
+   override inferred types, toggle required, discard. Mapping to entity
+   fields is P2's job (entities don't exist yet).
+3. **In-memory persistence only.** Plan lists local persistence as
+   optional; deferring to P5 to keep P1 tight.
+4. **Root redirect updated** `/accounts` → `/ingest` — the wedge-agnostic
+   surface is now the natural landing. Legacy `/accounts` still works;
+   territory still parked behind the flag.
+
+### What landed
+
+**Ingestion core (`ingestion/`)**
+
+- `types.ts` — `Dataset`, `Column`, `Row`, `ColumnType`, `ImportSource`,
+  `ValidationIssue{Kind}`, `ParsedSheet`. Deliberately loose.
+- `parse.ts` — `parseFile(file)` (browser) + `parseArrayBuffer(buf, name)`
+  (testable). Uses SheetJS with `cellDates: true`. Multi-sheet workbooks:
+  picks first non-empty sheet, tracks the rest in `otherSheets` for
+  UI surfacing. Empty cells → null. Empty headers → "Column N". Throws
+  `ParseError` on unreadable / empty-sheets input.
+- `infer.ts` — `inferColumnType(cells)`: date > number > boolean > text
+  priority (dates are the most specific due to narrow regex; number over
+  boolean so 0/1 columns infer as number). `coerceCell(raw, type)`: returns
+  null on empty or coercion failure (caller decides whether that's an issue).
+- `columns.ts` — `initialColumns(sheet)`: derives one `Column` per header
+  with slugified stable keys, disambiguates collisions, infers per-column type.
+- `validate.ts` — `buildDataset(sheet, columns)`: coerces rows to typed
+  `Row` objects. Emits `type_mismatch` on non-empty cell coercion failure,
+  `empty_required` on empty cells in required columns. Bad rows still land
+  in output with null for the failed cell (P1 doesn't filter — that's
+  P2/P3 concern).
+
+**Store**
+
+- `store/waferiqStore.ts` — new `useWaferiqStore` composed from
+  `store/slices/datasetsSlice.ts` (`datasets`, `staged`, `startImport`,
+  `updateStagedColumn`, `cancelImport`, `commitDataset`, `deleteDataset`).
+  Same slice + persistKeys convention as the legacy store.
+
+**UI**
+
+- `/ingest` route: `app/ingest/page.tsx` (server, metadata) →
+  `IngestClient.tsx` (client, dynamic-imports `IngestApp` with `ssr:false`)
+  → `IngestApp.tsx` (Zustand + orchestration). This three-layer pattern
+  works around Next 16's rule that `dynamic({ ssr: false })` can only live
+  inside a Client Component (matches the legacy territory pattern).
+- Components in `components/ingest/`: `DropZone`, `ColumnMappingTable`,
+  `ValidationSummary`, `DatasetList`. Uses existing design tokens
+  (`--surface-*`, `--ink-*`, `--brand`).
+- Root `app/page.tsx` redirect switched `/accounts` → `/ingest`.
+
+**Tests (+29 new, 141/141 total)**
+
+- `ingestion/parse.test.ts` (5) — hits `parseArrayBuffer` directly
+  because jsdom's `File.arrayBuffer` and `Response(file).arrayBuffer`
+  don't work as they do in real browsers.
+- `ingestion/infer.test.ts` (14) — inferColumnType priority, coerceCell
+  edge cases, date narrowness, 0/1-as-number preference.
+- `ingestion/columns.test.ts` (5) — slug keys, collision disambiguation,
+  fallback to `col_N`, per-column inference, defaults.
+- `ingestion/validate.test.ts` (5) — coercion, mismatch issues,
+  required-empty issues, discarded columns, missing source columns.
+
+### Harness state
+
+- `npx tsc --noEmit` clean.
+- `npm run lint` — 0 errors, same 3 pre-existing exhaustive-deps warnings
+  in the parked map files.
+- `npm test` — 141/141 across 22 files (was 112/18).
+- `npm run build` — succeeds. All 16 routes prerender; `/ingest` static.
+
+### Verified vs unverified
+
+- **Unit + build: green.**
+- **Manual browser verification: NOT DONE in this batch.** Plan's P1
+  "done when" is empirical — drop a real messy file, see it round-trip.
+  Next step: `npm run dev`, drop distributor POS or design-win export in
+  `/ingest`, confirm the mapping + validation surface behaves.
+
+### What unlocks next
+
+- **Discovery gate.** P2+ blocked until customer discovery names the
+  wedge. Do NOT populate `domain/` or `views/` before then.
+- **Optional between-phase polish** (won't block P2):
+  - Local persistence (localStorage / IndexedDB) — currently datasets die
+    on refresh. Bump to P5 unless a discovery interview needs it sooner.
+  - Sample-data CSV in `public/` for hero-page demoing without a real file.
+  - Better staged import name defaulting (filename-sans-ext already, but
+    could pull from the sheet name for XLSX).
+
+### Follow-ups from P0 still open
+
+- ESLint module boundaries still point at empty `components/territory/**`
+  globs. Update or drop when P2 lands.
+- Shared libs (`lib/territoryIndex.ts`, etc.) still colocated with active
+  code; prune under P2.

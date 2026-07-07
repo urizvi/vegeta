@@ -1,9 +1,8 @@
 import { redirect } from 'next/navigation';
 
-// WaferIQ pivot (2026-07-06): root used to redirect to /territory. That
-// route is now flag-gated legacy. Until the P4 results UI ships, land on
-// /accounts — the highest-fidelity surface still live. See
-// docs/waferiq-pivot.md.
+// WaferIQ pivot: root lands on the ingestion surface (P1). Was /accounts
+// as a P0 placeholder; now that /ingest is the wedge-agnostic entry
+// point, redirect there. Will move to the P4 results view when it ships.
 export default function Home() {
-  redirect('/accounts');
+  redirect('/ingest');
 }
