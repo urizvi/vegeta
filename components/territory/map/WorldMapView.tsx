@@ -200,12 +200,11 @@ export default function WorldMapView({ onDrillDown, cameraTarget, onCameraSettle
         return;
       }
       togglePinnedEntityIso(entityCode);
-      onDrillDown(entityCode, name);
     },
     [
       selectActive, toggleSelection, addToSelection, setSelection,
       eraserActive, clearCountryAssignment, activePaintId, assignCountryToGeo,
-      togglePinnedEntityIso, onDrillDown,
+      togglePinnedEntityIso,
     ],
   );
 
@@ -215,10 +214,9 @@ export default function WorldMapView({ onDrillDown, cameraTarget, onCameraSettle
       return (enriched.iso2 || enriched.id) === entityCode;
     });
     if (!geo) return;
-    const [lng, lat] = geoCentroid(geo as unknown as GeoJSON.Feature);
-    setCenter([lng, lat]);
-    setZoom(Math.min(zoomRef.current * 2.5, 8));
-  }, []);
+    const name = (geo as unknown as EnrichedGeo).name;
+    onDrillDown(entityCode, name);
+  }, [onDrillDown]);
 
   const handleLassoMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (!selectActive) return;
@@ -319,7 +317,8 @@ export default function WorldMapView({ onDrillDown, cameraTarget, onCameraSettle
           {...({ filterZoomEvent: (evt: Event) => {
             // Wheel events include trackpad pinch (delivered as wheel + ctrlKey). Always allow.
             if (evt.type === 'wheel') return true;
-            if (evt.type === 'dblclick') return true;
+            // Reject dblclick: country dblclick drills down (handled in React on the path).
+            if (evt.type === 'dblclick') return false;
             // Mousedown-drag pan only when zoomed in, to keep clicks at zoom 1 from being eaten by drag.
             return zoomRef.current > 1.05;
           }} as Record<string, unknown>)}

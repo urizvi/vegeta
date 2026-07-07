@@ -3,7 +3,7 @@
 import { useState, useCallback, useMemo, memo, useEffect, useRef } from 'react';
 import { ComposableMap, ZoomableGroup, Geographies, Geography, Graticule, type GeographyFeature } from 'react-simple-maps';
 import type { GeoProjection } from 'd3-geo';
-import { geoMercator, geoPath, geoCentroid } from 'd3-geo';
+import { geoMercator, geoPath, geoCentroid, geoBounds } from 'd3-geo';
 import { useCountryStates } from '@/hooks/useCountryStates';
 import type { StateFeature } from '@/hooks/useCountryStates';
 import {
@@ -112,17 +112,63 @@ const StateGeo = memo(function StateGeo({
 const MAP_W = 980;
 const MAP_H = 551;
 
-// Fit a geoMercator projection to the features by width; return the geographic
-// center, zoom, and the SVG height needed so no feature is clipped vertically.
-function fitFeatures(features: StateFeature[]): { center: [number, number]; zoom: number; mapHeight: number } {
+// Some countries cross the 180° antimeridian (e.g. Russia's Chukotka), which a
+// default geoMercator splits to the far side of the map. Rotating the
+// projection's central meridian moves the cut away so the country renders whole.
+const ROTATION_BY_ISO2: Record<string, [number, number, number]> = {
+  RU: [-105, 0, 0],
+};
+const rotationFor = (iso2: string): [number, number, number] | undefined => ROTATION_BY_ISO2[iso2];
+
+// Some countries have a vast, sparsely-relevant northern extent (e.g. Canada's
+// High Arctic islands reach ~83°N). Capping the latitude used for the fit lets
+// the populated bulk fill the canvas; anything above spills off the top edge.
+const CLIP_NORTH_BY_ISO2: Record<string, number> = {
+  CA: 70,
+};
+const clipNorthFor = (iso2: string): number | undefined => CLIP_NORTH_BY_ISO2[iso2];
+
+// Fit a geoMercator projection to the features within the fixed canvas (both
+// width and height) so the whole map fits without clipping or scrolling.
+function fitFeatures(
+  features: StateFeature[],
+  rotate?: [number, number, number],
+  clipNorthLat?: number,
+): { center: [number, number]; zoom: number; mapHeight: number } {
   if (features.length === 0) return { center: [0, 20], zoom: 1, mapHeight: MAP_H };
   const baseScale = 140;
   const collection = { type: 'FeatureCollection' as const, features };
-  const fitted = geoMercator().fitWidth(MAP_W * 0.98, collection as Parameters<ReturnType<typeof geoMercator>['fitWidth']>[1]);
+  const projection = geoMercator();
+  if (rotate) projection.rotate(rotate);
+  const fitted = projection.fitSize([MAP_W * 0.98, MAP_H * 0.98], collection as Parameters<ReturnType<typeof geoMercator>['fitSize']>[1]);
   const [[x0, y0], [x1, y1]] = geoPath(fitted).bounds(collection as Parameters<ReturnType<typeof geoPath>['bounds']>[0]);
-  const mapHeight = Math.max(MAP_H, (y1 - y0) / 0.98);
-  const fittedCenter = fitted.invert!([(x0 + x1) / 2, (y0 + y1) / 2]) as [number, number];
-  return { center: fittedCenter, zoom: (fitted.scale() / baseScale) * 0.8, mapHeight };
+  const baseZoom = (fitted.scale() / baseScale) * 0.8;
+
+  // No northern cap: frame the whole country.
+  if (clipNorthLat == null) {
+    const fittedCenter = fitted.invert!([(x0 + x1) / 2, (y0 + y1) / 2]) as [number, number];
+    return { center: fittedCenter, zoom: baseZoom, mapHeight: MAP_H };
+  }
+
+  // Northern cap: keep the country-wide projection, but zoom into and recenter
+  // on the sub-cap bounding box so the empty far north spills off the top edge
+  // instead of shrinking everything to fit it.
+  const [[west, south], [east, north]] = geoBounds(collection as Parameters<typeof geoBounds>[0]);
+  const cappedNorth = Math.min(north, clipNorthLat);
+  const corners: [number, number][] = [
+    [west, south], [east, south], [east, cappedNorth], [west, cappedNorth],
+  ];
+  const pts = corners.map((c) => fitted(c) as [number, number]);
+  const xs = pts.map((q) => q[0]);
+  const ys = pts.map((q) => q[1]);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  const zoomFactor = Math.min(
+    (MAP_W * 0.98) / (maxX - minX),
+    (MAP_H * 0.98) / (maxY - minY),
+  );
+  const cappedCenter = fitted.invert!([(minX + maxX) / 2, (minY + maxY) / 2]) as [number, number];
+  return { center: cappedCenter, zoom: baseZoom * zoomFactor, mapHeight: MAP_H };
 }
 
 const isAlbersUsa = (iso2: string) => iso2 === 'US';
@@ -161,13 +207,15 @@ export default function DrillDownMapView({ countryIso2, countryName, cameraTarge
   const geographiesRef = useRef<GeographyFeature[]>([]);
   const useAlbers = isAlbersUsa(countryIso2);
   const solidBackdrop = useSolidBackdrop(countryIso2);
+  const rotation = rotationFor(countryIso2);
+  const clipNorth = clipNorthFor(countryIso2);
 
   // Derive center + zoom from features whenever the country changes (not used for AlbersUSA)
   const { center, zoom: initialZoom, mapHeight } = useMemo(
     () => (useAlbers
       ? { center: [-96, 38] as [number, number], zoom: 1, mapHeight: MAP_H }
-      : fitFeatures(features)),
-    [features, useAlbers],
+      : fitFeatures(features, rotation, clipNorth)),
+    [features, useAlbers, rotation, clipNorth],
   );
   const [prevInitialZoom, setPrevInitialZoom] = useState(initialZoom);
   const [prevCenter, setPrevCenter] = useState(center);
@@ -389,7 +437,7 @@ export default function DrillDownMapView({ countryIso2, countryName, cameraTarge
       <div className={`absolute inset-0 overflow-y-auto overflow-x-hidden ${className ?? ''}`}>
       <ComposableMap
         projection={useAlbers ? 'geoAlbersUsa' : 'geoMercator'}
-        projectionConfig={useAlbers ? { scale: 900 } : undefined}
+        projectionConfig={useAlbers ? { scale: 900 } : (rotation ? { rotate: rotation } : undefined)}
         width={MAP_W}
         height={mapHeight}
         style={{ width: '100%', height: 'auto', display: 'block' }}

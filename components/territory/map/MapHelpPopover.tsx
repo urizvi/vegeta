@@ -20,6 +20,8 @@ export function MapHelpPopover({ open, onClose }: { open: boolean; onClose: () =
     ['↑ ↓ ← →', 'Pan the map'],
     ['+ / -', 'Zoom in / out'],
     ['0', 'Reset view'],
+    ['Click', 'Pin / unpin country'],
+    ['Double-click', 'Drill into country'],
     ['Shift + click', 'Add to selection'],
     ['⌘ / Ctrl + click', 'Toggle selection'],
     ['Drag (in Select mode)', 'Lasso multi-select'],
