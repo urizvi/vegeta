@@ -1,0 +1,7 @@
+Distributor,Period,Part Number,End Customer,Qty,Cost,Auth Price,Auth #
+Arrow,2026-06-01,ABC-1230,Acme Inc.,100,5.00,3.00,DA-11021
+Arrow,2026-06-01,ABC-1230,Beta Corp,50,5.00,3.00,DA-11022
+Arrow,2026-06-01,XYZ-9001,Gamma Ltd,25,18.00,12.50,DA-11023
+Avnet,2026-06-01,ABC-1230,Acme Inc.,75,5.00,3.00,DA-11024
+Avnet,2026-06-01,DEF-4567,Delta LLC,220,2.50,1.50,DA-11025
+Arrow,2026-06-01,XYZ-9001,Ghost Trading,10,18.00,12.50,DA-11026

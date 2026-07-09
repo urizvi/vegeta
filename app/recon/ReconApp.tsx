@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useWaferiqStore } from '@/store/waferiqStore';
 import { reconcile } from '@/domain/pos-recon/engine';
 import {
@@ -16,6 +16,7 @@ import StatusBar from '@/components/recon/StatusBar';
 import FiltersBar from '@/components/recon/FiltersBar';
 import ResultsTable from '@/components/recon/ResultsTable';
 import ExportButtons from '@/components/recon/ExportButtons';
+import HealthPanel from '@/components/HealthPanel';
 
 export default function ReconApp() {
   const posRecords = useWaferiqStore((s) => s.posRecords);
@@ -23,6 +24,10 @@ export default function ReconApp() {
   const reconResults = useWaferiqStore((s) => s.reconResults);
   const lastReconAt = useWaferiqStore((s) => s.lastReconAt);
   const setReconResults = useWaferiqStore((s) => s.setReconResults);
+  const recordVisit = useWaferiqStore((s) => s.recordVisit);
+  const recordReconRun = useWaferiqStore((s) => s.recordReconRun);
+
+  useEffect(() => { recordVisit(); }, [recordVisit]);
 
   const [filters, setFilters] = useState<ReconFilters>(emptyFilters);
 
@@ -39,6 +44,7 @@ export default function ReconApp() {
 
   function run() {
     setReconResults(reconcile(posRecords, claims));
+    recordReconRun();
   }
 
   return (
@@ -84,6 +90,8 @@ export default function ReconApp() {
           </div>
         </>
       )}
+
+      <HealthPanel />
     </div>
   );
 }

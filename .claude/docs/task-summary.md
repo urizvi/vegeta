@@ -2832,3 +2832,149 @@ under-10-minutes bar itself is next-batch verification.
 - Local persistence — the impact grew this batch. Datasets, entities,
   AND recon results all die on refresh now. Bumping this into P5
   proper.
+
+---
+
+## 2026-07-09 — WaferIQ P5: design-partner hardening infrastructure
+
+Plan's P5 outcome-done-when — "1–2 partners use it weekly on live data
+and you can measure whether they return" — isn't ship-able as code.
+What is ship-able is the infrastructure that makes that outcome
+possible: persistence so a weekly return isn't punished, usage
+counters so return is measurable, self-serve so a partner can walk
+the flow unassisted, robustness polish so the first hiccup doesn't
+break trust. All of that landed. The partner conversation itself is
+tracked in next-steps.md.
+
+### Scope calls (not user-confirmed, defensible from plan)
+
+1. **Persistence via zustand's `persist` middleware** wrapping a
+   size-guarded storage adapter, not a bespoke `exportState`/
+   `importState` API. The middleware handles rehydration, versioning,
+   and partial state selection; the adapter adds the guardrails.
+2. **Size-guarded storage adapter** with a soft byte-cap (default
+   4 MB) and QuotaExceededError catch. On either trigger, the store
+   silently falls back to in-memory writes for the rest of the
+   session; the UI surfaces a small "storage disabled" banner via a
+   subscribable status. Backing store injectable for tests.
+3. **Usage as a persisted store slice**, not a separate lib +
+   localStorage wrapper. Composes with existing slice pattern; means
+   `HealthPanel` uses the same `useWaferiqStore` hook everything else
+   does.
+4. **`HealthPanel` visible on `/recon`**, not gated behind a debug
+   toggle. The retention-thesis metric ("return rate = visit-days /
+   span-days") is the whole point of P5 — hiding it defeats measurement.
+5. **Pricing-gate seam is `checkGate` + `useGate` today**, both
+   returning true. `ExportButtons` is the reference consumer so future
+   tier work has a real example. Not enforcing anything now; the plan
+   says "make the seam exist."
+6. **Sample data as three static CSVs in `public/sample/`.** Fetched
+   via `parseArrayBuffer` (browser can't build a proper `File` from
+   `fetch`, but our test-driven refactor of the parser already exposed
+   both entry points). Small (8 POS rows, 6 S&D, 2 PP) but shaped like
+   real distributor exports so the suggester heuristics have something
+   to bite.
+7. **Robustness polish is narrow**: file-size warning at >10 MB (not
+   an error — big files are legitimate), better ParseError UI, storage
+   banner. Explicitly *not* virtualizing the mapping/results tables;
+   punt on that until it hurts.
+
+### What landed
+
+**Persistence (`store/`)**
+
+- `persistedStorage.ts` — `createGuardedStorage({ softCapBytes,
+  backing? })`. Injectable backing for tests. Emits status via
+  `getStorageState()` + `subscribeStorageState()`. Statuses:
+  `ok` | `disabled_quota` | `disabled_unavailable`.
+- `waferiqStore.ts` — recomposed with `persist(...)` middleware,
+  `partialize` selects only `PERSISTED_KEYS` (skips ephemeral
+  `staged` from datasetsSlice), `version: 1`, migration switch stubbed
+  for future schema bumps.
+
+**Usage (`store/slices/usageSlice.ts`)**
+
+- `firstSeenAt`, `lastSeenAt`, `visitDays[]` (unique ISO local-day
+  strings, sorted), `reconRuns`, `exportsCsv`, `exportsXlsx`,
+  `datasetImports`.
+- Actions: `recordVisit()`, `recordReconRun()`, `recordExport(fmt)`,
+  `recordDatasetImport()`, `resetUsage()`.
+- Wire points: `recordVisit` on IngestApp + ReconApp mount,
+  `recordReconRun` on ReconApp run, `recordExport` in ExportButtons,
+  `recordDatasetImport` in IngestApp commit + sample loader.
+
+**Gates (`lib/waferiqGates.ts`)**
+
+- `checkGate(feature)` (pure), `useGate(feature)` (memoized hook),
+  `assertGate(feature)` (throws when blocked).
+- Renamed from an earlier draft that used `useGate` throughout — React
+  rules-of-hooks lint (Next 16) demanded hook-shaped consumers, so
+  the pure form is `checkGate` and the hook is a `useMemo` wrapper.
+- Reference consumer: `ExportButtons`, which renders a 🔒 affordance
+  when a gate blocks (still unlocked visually today).
+
+**UI**
+
+- `components/HealthPanel.tsx` — usage stats grid + storage status
+  line, mounted at bottom of `/recon`.
+- `components/ingest/OnboardingCard.tsx` — 5-step intro + "Load sample
+  data" button, visible only when `datasets.length === 0`.
+- `app/ingest/IngestApp.tsx` — storage-status banner, sample-data
+  loader (fetches three CSVs, drives through the normal build path),
+  large-file warning (>10 MB soft threshold), clearer parse-error UI.
+- `app/recon/ReconApp.tsx` — records visit + run, mounts `HealthPanel`.
+
+**Sample data (`public/sample/`)**
+
+- `pos.csv` (8 rows across 2 distributors, 4 parts, 6 customers).
+- `sd_claims.csv` (6 rows; one intentional orphan — "Ghost Trading" —
+  to demo an orphan_claim; one intentional qty mismatch on Avnet/DEF-4567
+  to demo a quantity_mismatch).
+- `pp_claims.csv` (2 rows tied to the two POS rows with matching
+  distributors/customers).
+
+### Tests (+14 new, 216/216 total across 32 files)
+
+- `store/persistedStorage.test.ts` (5): backing read/write, quota-error
+  fallback, byte-cap enforcement, subscriber notification, null-backing
+  fallback.
+- `store/slices/usageSlice.test.ts` (7): initial zeros, `firstSeenAt`
+  set-once, day-uniqueness in `visitDays`, monotonic counters, per-format
+  export bump, dataset-import bump, `resetUsage` clears everything.
+- `lib/waferiqGates.test.ts` (2 describe blocks, 5 tests): every gate
+  currently allowed for both `checkGate` and `assertGate`.
+
+### Harness state
+
+- `npx tsc --noEmit` clean.
+- `npm run lint` — 0 errors (fixed a `react-hooks/rules-of-hooks`
+  error mid-batch by splitting `checkGate`/`useGate`). Same 3
+  pre-existing exhaustive-deps warnings in parked map files.
+- `npm test` — 216/216 across 32 files (was 199/29).
+- `npm run build` — succeeds. Route table unchanged.
+
+### Verified vs unverified
+
+- Unit + build: green.
+- Manual browser verification: still NOT DONE. Now especially worth
+  doing since persistence changes the failure mode — instead of "recon
+  died on refresh," a bug in persist would look like "state didn't
+  come back correctly." Should verify with sample data first.
+
+### Explicitly deferred from P5
+
+- **Real auth.** No backend. Local-persistence covers durability for a
+  single-user browser. Multi-user / workspace is separate.
+- **Server-side analytics beacon.** Same — needs backend. Local
+  counters are user-visible for their own retention self-check.
+- **Real pricing tiers.** `checkGate` returns true; a future
+  workspace-scoped entitlement fetch hooks in when there's a backend.
+- **Large-file virtualization.** Nobody's hit the wall yet; deferring.
+
+### Follow-ups from earlier phases
+
+- ESLint module boundaries at empty `components/territory/**` globs
+  still stand. Not touched.
+- Shared-lib pruning still stands; accounts route still imports.
+- P4 empirical done-when (under 10 minutes on real data, unaided) is
+  now the primary user-facing next step.

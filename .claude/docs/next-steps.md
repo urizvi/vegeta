@@ -55,21 +55,28 @@ funnel deferred as a possible sibling wedge later.
   duplicate detection, calculated-credit math. `Matcher` interface is
   the seam for a future Agent SDK integration.
 - [x] **P4 — recon dashboard.** `/recon` route with summary metrics +
-  distribution bar + filters (status/flag/search) + drill-down rows
-  showing POS record and linked claims + CSV/XLSX export. Top nav
-  in `RootLayout` (WaferIQ / Ingest / Recon). `ReconRunner` on
-  `/ingest` shrunk to a "go to /recon" nudge.
+  distribution bar + filters + drill-down + CSV/XLSX export. Top nav in
+  `RootLayout`. `ReconRunner` on `/ingest` shrunk to a nudge.
+- [x] **P5 — design-partner hardening infrastructure.** Local
+  persistence via zustand `persist` + size-guarded storage adapter.
+  Usage counters (visit-days, recon runs, exports, dataset imports)
+  persisted in a `usageSlice`. `HealthPanel` on `/recon` surfaces the
+  return-rate metric. Pricing-gate seam via `checkGate`/`useGate` +
+  `ExportButtons` consumer. Onboarding card on `/ingest` with "Load
+  sample data" button; three sample CSVs in `public/sample/`. Large-
+  file warning (>10 MB) and clearer parse-error UI.
 
 ## Next
 
-- [ ] **P5 — design-partner hardening.** Robust to malformed / large /
-  multi-period / multi-distributor inputs, self-serve onboarding, usage
-  instrumentation for the retention thesis, pricing-gating hooks.
-- [ ] **Manual browser verification of the whole chain.** With P4
-  landed, one session can now exercise P1 → P2 → P3 → P4. Drop a
-  real POS file, drop a claims file, map both, hit Reconcile on
-  `/recon`, filter/drill-down/export. This is the "under 10 minutes,
-  unaided" done-when the plan set for P4.
+- [ ] **Manual browser verification of the whole chain.** Drop a real
+  POS file, drop a claims file, map both, hit Reconcile on `/recon`,
+  filter/drill-down/export. The plan's under-10-minute-unaided
+  done-when. Now that persistence is live, this can be verified across
+  refreshes too.
+- [ ] **First partner conversation.** The plan's real P5 done-when is
+  "1–2 partners use it weekly on live data and you can measure whether
+  they return." The infrastructure is here; this item is the actual
+  partner outreach + onboarding.
 
 ## Deferred to when we can wire it
 
@@ -81,6 +88,20 @@ funnel deferred as a possible sibling wedge later.
   Agent SDK-backed implementation of `customerScore` / `partScore`
   slots in without touching engine code. Blocked on wiring API keys
   and picking a matching prompt.
+- [ ] **Server-side analytics beacon.** Local usage counters are
+  self-visible for the partner but not visible to us. Needs a small
+  backend endpoint + a periodic beacon. Blocked on picking a hosting
+  target for the backend.
+- [ ] **Lightweight auth.** Same story — needs a backend. Local
+  persistence covers durability for a single-user browser; multi-user
+  or workspace-level auth is separate.
+- [ ] **Large-file virtualization.** Column-mapping table + results
+  table both render every row. Fine at a few thousand; punt on
+  virtualization until someone brings a file that hurts.
+- [ ] **Real pricing tier plumbing.** `checkGate` returns true for
+  everything today. When tiers exist, they hook into that function —
+  probably driven by a workspace-scoped entitlement fetched from the
+  backend (needs backend).
 
 ## Anti-list (rejected / shelved — don't accidentally revive)
 
