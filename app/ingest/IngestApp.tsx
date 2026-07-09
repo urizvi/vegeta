@@ -10,6 +10,7 @@ import DropZone from '@/components/ingest/DropZone';
 import ColumnMappingTable from '@/components/ingest/ColumnMappingTable';
 import ValidationSummary from '@/components/ingest/ValidationSummary';
 import DatasetList from '@/components/ingest/DatasetList';
+import ReconRunner from '@/components/ingest/ReconRunner';
 
 interface Staged {
   sheet: ParsedSheet;
@@ -146,6 +147,8 @@ export default function IngestClient() {
           <ValidationSummary issues={preview.issues} rowCount={preview.rows.length} />
         </section>
       )}
+
+      <ReconRunner />
 
       <section>
         <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-[color:var(--ink-muted)]">

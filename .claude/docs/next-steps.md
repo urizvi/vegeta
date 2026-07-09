@@ -49,30 +49,39 @@ funnel deferred as a possible sibling wedge later.
 ## In progress / just landed
 
 - [x] **P2 — POS-recon data model.** `domain/pos-recon/entities.ts` +
-  `import.ts`, three new store slices on `useWaferiqStore`
-  (`posRecordsSlice`, `claimsSlice`, `reconResultsSlice`).
+  `import.ts`, three new store slices on `useWaferiqStore`.
 - [x] **P2→P3 bridge UI.** `EntityMappingPanel` on each saved dataset
-  in `/ingest`: pick entity kind (POS records / S&D / PP), auto-seeded
-  column-mapping via `domain/pos-recon/suggest.ts` synonym heuristic,
-  run mapper, push results into the corresponding slice. Entity counts
-  surface on each dataset row. See P2-bridge entry in `task-summary.md`.
+  in `/ingest`: pick entity kind, auto-seeded column mapping via the
+  suggester heuristic, run mapper, push results into the store.
+- [x] **P3 — POS-recon matching engine.** `domain/pos-recon/engine.ts`
+  + `matcher.ts` + `normalize.ts`. Reconcile POS ↔ claims with qty
+  tolerance, soft + hard date windows, per-claim-type price checks,
+  duplicate detection, calculated-credit math. `Matcher` interface is
+  the seam for a future Agent SDK integration. Minimal
+  `ReconRunner` on `/ingest` shows counts + timestamp; full drill-down
+  is P4.
 
 ## Next
 
-- [ ] **P3 — POS recon matching engine.** Consumes `POSRecord[]` +
-  `Claim[]`, produces `ReconciliationResult[]`. Owns the matching
-  algorithm (part-number + customer + date-window + qty tolerance),
-  discrepancy-flag generation, and calculated-credit math. Claude Agent
-  SDK integration for fuzzy column mapping / entity matching lives here
-  as an isolated, swappable module — not baked through the codebase.
-  Test against fixtures built from a partner's real (anonymized) data,
-  per the plan's cross-cutting rule.
-- [ ] **P4 — recon dashboard.** One view: matched vs flagged, drill-down
-  on discrepancies. D3, no chart library. CSV/XLSX export round-trip.
-  Under-10-minute unaided time-to-first-value target.
+- [ ] **P4 — recon dashboard.** Dedicated `/recon` route (or under
+  `/ingest`) with a results table, filter by status/flag, drill-down
+  from a POS row to matched claims and vice versa, CSV/XLSX export
+  round-trip. D3 for any charts (no chart library). Under-10-minute
+  unaided time-to-first-value target.
 - [ ] **P5 — design-partner hardening.** Robust to malformed / large /
   multi-period / multi-distributor inputs, self-serve onboarding, usage
   instrumentation for the retention thesis, pricing-gating hooks.
+
+## Deferred to when we can wire it
+
+- [ ] **Real partner data as engine fixtures.** P3 tests are synthetic
+  and cover every flag kind, but the plan calls for anonymized partner
+  data. Do this alongside the first discovery conversation that
+  produces real files.
+- [ ] **AgentMatcher.** `Matcher` interface exists; a Claude
+  Agent SDK-backed implementation of `customerScore` / `partScore`
+  slots in without touching engine code. Blocked on wiring API keys
+  and picking a matching prompt.
 
 ## Anti-list (rejected / shelved — don't accidentally revive)
 

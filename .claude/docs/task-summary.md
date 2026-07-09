@@ -2598,3 +2598,114 @@ missing user-facing seam. Landing it now unblocks manual verification.
   via `setReconResults`. Matching algorithm + tolerance + discrepancy
   flag generation. Claude Agent SDK as an isolated fuzzy-matching
   module. Test against real anonymized partner data per the plan.
+
+---
+
+## 2026-07-09 — WaferIQ P3: POS reconciliation engine
+
+Plan's P3 done-when: "real input produces correct flags/metrics, proven
+by fixture tests." Landing all the mechanics; partner-real fixtures are
+deferred to when a discovery conversation surfaces anonymized data.
+
+### Scope calls (not user-confirmed, defensible from plan)
+
+1. Engine + matcher + normalize in three files, not over-modularized.
+2. **`Matcher` interface + `LocalMatcher` only** in P3. Real Claude
+   Agent SDK integration deferred until API keys are wired — the seam
+   is the module boundary the plan wanted.
+3. Sensible `defaultConfig`; overridable via param. No settings UI yet.
+4. Minimal `ReconRunner` UI on `/ingest` so the engine is invokable
+   end-to-end without a scratch script. Full drill-down = P4.
+5. Fixtures are synthetic and cover every flag kind. Partner-real
+   fixture ingestion is a follow-up.
+
+### What landed
+
+**Engine core (`domain/pos-recon/`)**
+
+- `normalize.ts` — `normalizePartNumber` (uppercase, strip
+  non-alphanumerics), `normalizeCustomer` (lowercase, drop punctuation,
+  strip common suffixes: Inc/Ltd/GmbH/Corp/…), `dateDiffDays` (absolute
+  int days between ISO dates; NaN on unparseable).
+- `matcher.ts` — `Matcher` interface with `customerScore(a, b)` and
+  `partScore(a, b)` returning `[0, 1]`. `LocalMatcher` default: exact-
+  after-normalize = 1.0, prefix/suffix relationship = 0.7, else 0.
+  Deliberately conservative — no edit-distance fuzz; false positives
+  in recon cost users real money, so ambiguous cases should end up in
+  the flagged bucket via the engine, not silently pass. `AgentMatcher`
+  is the follow-up; interface is the seam.
+- `engine.ts` — `reconcile(pos, claims, config?, matcher?)` returning
+  `ReconciliationResult[]`. Three passes:
+  1. Bucket POS by `(distributor | normalizedPart)`; for each claim,
+     find best-scoring POS candidate above `customerScoreThreshold`
+     and within `hardDateWindowDays`. Beyond hard window → treat as
+     unmatched entirely.
+  2. Build one result per POS row. Empty → `missing_claim`. Non-empty
+     → collect flags via `buildFlagsForMatch`; `matched` if flags
+     empty else `flagged`. Compute `calculatedCredit` per claim
+     type (S&D: (cost − authorized) × qty; PP: (original − new) × qty).
+  3. Any claim not linked to a POS row → `orphan_claim` result.
+- `defaultConfig`: qty tolerance ±5%, soft date window 30d, hard 90d,
+  customer score threshold 0.7, price-mismatch threshold ±5%, strict
+  distributor on.
+
+**Flags emitted**
+
+- `missing_claim` (warning) — POS with no claim.
+- `orphan_claim` (error) — Claim with no POS.
+- `quantity_mismatch` (error) — Total claim qty for a POS row outside
+  tolerance; `amountImpact` = (Δqty × resalePrice).
+- `price_mismatch` (error) — **S&D only.** POS resalePrice vs
+  authorizedPrice outside threshold. PP doesn't fire this — no
+  POS-side "expected new price" to compare against; that's semantics
+  we'd need a separate price sheet for.
+- `date_out_of_window` (warning) — Claim period vs POS shipDate
+  outside soft window but within hard.
+- `duplicate_claim` (warning) — Multiple claims tied to one POS row.
+
+**UI**
+
+- `components/ingest/ReconRunner.tsx` — mounts on `/ingest` above the
+  dataset list. Hidden while both slices are empty. Shows POS + claim
+  counts, "Run reconciliation" button (disabled unless both slices
+  non-empty), post-run metric cards (matched / flagged / missing /
+  orphan) and total calculated credit. Full drill-down (per-row
+  claim links, per-flag filtering, export) is P4.
+
+### Tests (+29 new, 185/185 total across 27 files)
+
+- `normalize.test.ts` (6): part number normalization, customer suffix
+  stripping, dateDiffDays incl. NaN.
+- `matcher.test.ts` (7): exact / prefix / unrelated / empty cases for
+  both scorers.
+- `engine.test.ts` (16): happy-path S&D + PP matches with correct
+  credit math, every flag kind, tolerance boundaries, hard-window
+  rejection, matcher normalization behavior end-to-end, determinism
+  across input orderings, empty inputs, config override.
+
+### Harness state
+
+- `npx tsc --noEmit` clean.
+- `npm run lint` — 0 errors, same 3 pre-existing exhaustive-deps
+  warnings in parked map files.
+- `npm test` — 185/185 across 27 files (was 156/24).
+- `npm run build` — succeeds; route table unchanged.
+
+### Verified vs unverified
+
+- Unit + build: green.
+- Manual browser verification: still NOT DONE (unchanged from bridge
+  UI batch). Now the whole ingest → map → reconcile chain is invokable
+  from `/ingest`, so a single browser session can exercise P1 through
+  P3.
+
+### What unlocks next
+
+- **P4 — recon dashboard.** Results table, filter by status/flag,
+  drill-down from a POS row to matched claims and vice versa, CSV/XLSX
+  export. Under-10-minute unaided time-to-first-value target.
+- **Real partner fixtures.** The plan's cross-cutting rule says test
+  against anonymized real data. Do this when a discovery conversation
+  surfaces a real POS + claims file pair.
+- **AgentMatcher.** Slot a Claude Agent SDK-backed `Matcher` in when
+  we can wire API keys and pick a matching prompt.
