@@ -2533,3 +2533,68 @@ recommendation, took it.
 - Shared libs pruning (unchanged — accounts still imports them).
 - P1 manual browser verification (unchanged — should happen alongside
   the bridge UI work).
+
+---
+
+## 2026-07-09 — WaferIQ P2 bridge UI: /ingest → POS-recon entities
+
+Small batch to close the gap between P1 (raw datasets) and P2 (typed
+POS-recon entities). Not a phase in the plan; the P2 done-when only
+required the data model, but the P2 entry called this out as the
+missing user-facing seam. Landing it now unblocks manual verification.
+
+### What landed
+
+- `domain/pos-recon/suggest.ts` — heuristic column-to-entity-field
+  suggester. Synonym tables per entity kind (POS, S&D, PP) covering
+  realistic distributor headers ('MPN', 'Disti', 'Qty', 'Ext Total',
+  'Auth #', etc.). Scoring: exact = 100, normalized substring = 70,
+  token-boundary match = 50. Never fuzzy — false positives are more
+  harmful than false negatives when the next step is coercion. Fields
+  are processed longest-synonym-list first so specific fields
+  (`authorizedPrice`) claim their column before generic ones (`price`).
+  Placeholder for a Claude Agent SDK integration in P3.
+- `components/ingest/EntityMappingPanel.tsx` — inline panel:
+  entity-kind picker, per-field column dropdowns seeded from the
+  suggester, "Run mapping" button, outcome summary. Uses the `key`
+  remount pattern (`<MappingForm key={kind} />`) so switching entity
+  kind resets the form cleanly — avoids the `set-state-in-effect`
+  antipattern that Next 16 / React 19 lint now flags.
+- `components/ingest/DatasetList.tsx` — expand toggle per dataset,
+  entity counts (POS records, S&D claims, PP claims), cascading delete
+  so removing a dataset drops its parked entities via the slice APIs.
+- Claim replacement logic: when running the mapper for one claim type,
+  keep this-dataset claims of the OTHER type intact (a dataset may
+  legitimately produce both from separate passes).
+
+### Tests (+7 new, 156/156 total across 24 files)
+
+- `domain/pos-recon/suggest.test.ts` — canonical snake_case matching,
+  distributor-style synonyms ('Disti', 'MPN', 'Qty'), no-double-claim
+  invariant, no-match returns empty, discarded columns ignored, S&D
+  cost/authorized synonyms, PP original/new/effective synonyms.
+
+### Harness state
+
+- `npx tsc --noEmit` clean.
+- `npm run lint` — 0 errors (fixed a `react-hooks/set-state-in-effect`
+  error mid-batch by dropping the useEffect reset in favor of `key`
+  remount). Same 3 pre-existing exhaustive-deps warnings in parked map
+  files.
+- `npm test` — 156/156 across 24 files.
+- `npm run build` — succeeds. Route table unchanged.
+
+### Verified vs unverified
+
+- Unit + build: green.
+- Manual browser verification: NOT DONE. Now genuinely unblocked
+  though — bridge UI exists, POS-recon slices exist, ingestion parser
+  exists. Next-steps.md prioritizes this.
+
+### What unlocks next
+
+- **P3 — matching engine.** Real work now. Consumes `POSRecord[]` +
+  `Claim[]` from `useWaferiqStore`, emits `ReconciliationResult[]`
+  via `setReconResults`. Matching algorithm + tolerance + discrepancy
+  flag generation. Claude Agent SDK as an isolated fuzzy-matching
+  module. Test against real anonymized partner data per the plan.

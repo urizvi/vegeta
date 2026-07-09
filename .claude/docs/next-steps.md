@@ -26,13 +26,11 @@ funnel deferred as a possible sibling wedge later.
   via the root redirect, but there's no way to jump between
   `/ingest` ↔ `/accounts` ↔ (later) `/results`. A minimal top-bar link
   set would help even before P4.
-- [ ] **Wire the ingest UI to POS-recon mapping.** After P1's dataset
-  save, the user has no way to tell WaferIQ "this dataset is POS records"
-  and pick which column maps to `partNumber`, etc. Needs a small mapping
-  UI on the dataset detail (or a new step in the ingest flow) that calls
-  `mapPOSRecords` / `mapShipAndDebitClaims` / `mapPriceProtectionClaims`
-  and pushes the results into the corresponding store slice. This is the
-  P2→P3 bridge; probably lives next to `/ingest`.
+- [ ] **Manual browser verification of the ingest → mapping flow.**
+  Now that the bridge UI (`EntityMappingPanel` under each dataset in
+  `/ingest`) is wired, this is the moment to `npm run dev` + drop a
+  real POS file + hit "Map to POS-recon" and confirm the round-trip.
+  Verification blocked purely on doing it, not on any missing code.
 
 ## Nice-to-have between phases
 
@@ -52,8 +50,12 @@ funnel deferred as a possible sibling wedge later.
 
 - [x] **P2 — POS-recon data model.** `domain/pos-recon/entities.ts` +
   `import.ts`, three new store slices on `useWaferiqStore`
-  (`posRecordsSlice`, `claimsSlice`, `reconResultsSlice`). See P2 entry
-  in `task-summary.md`.
+  (`posRecordsSlice`, `claimsSlice`, `reconResultsSlice`).
+- [x] **P2→P3 bridge UI.** `EntityMappingPanel` on each saved dataset
+  in `/ingest`: pick entity kind (POS records / S&D / PP), auto-seeded
+  column-mapping via `domain/pos-recon/suggest.ts` synonym heuristic,
+  run mapper, push results into the corresponding slice. Entity counts
+  surface on each dataset row. See P2-bridge entry in `task-summary.md`.
 
 ## Next
 
