@@ -2422,3 +2422,114 @@ drop a real, messy file in and get a clean, validated dataset out."
   globs. Update or drop when P2 lands.
 - Shared libs (`lib/territoryIndex.ts`, etc.) still colocated with active
   code; prune under P2.
+
+---
+
+## 2026-07-09 — WaferIQ P2: POS-recon data model
+
+### Wedge decision
+
+Locked as **POS / sell-through reconciliation.** Design-win funnel
+tracking deferred to a possible sibling wedge later, not killed. Choice
+was made without formal discovery, based on the four-point argument
+recorded in `[[waferiq-pivot]]` memory: dollar-attached pain per event,
+monthly-close cadence matches the retention thesis directly, moat is a
+matching algorithm horizontal tools can't replicate cleanly, and the
+core is testable with objective correctness. User asked for a
+recommendation, took it.
+
+### Scope calls (not user-confirmed, defensible from plan)
+
+1. Wedge domain lives at `domain/pos-recon/` so a `design-win-funnel/`
+   sibling is a clean add later.
+2. Claims modeled as a **discriminated union** `Claim = ShipAndDebit |
+   PriceProtection` with shared base fields, so the P3 matcher walks
+   them uniformly.
+3. `DiscrepancyFlag` is a nested type on `ReconciliationResult`, not a
+   top-level entity. Flags don't exist independently of results.
+4. **Store: added new slices, did not rename or reshape the legacy
+   `useTerritoryStore`.** The plan says "reshape Zustand stores" — read
+   as reshaping the wedge store (`waferiqStore`), not renaming the
+   legacy artifact that still powers parked accounts/teams/tasks routes.
+   Renaming rippled across those routes would be a big diff for
+   cosmetic gain and violates "legacy parked not deleted."
+5. **No matching engine here.** P2 is data model only; P3 owns matching.
+6. **No UI here.** P4 owns the recon dashboard. `/ingest` still works
+   and is enough to see rows land in the new slices via the mapper.
+   (The bridge UI that lets a user pick a dataset and hit `mapPOSRecords`
+   is a small P2→P3 chore, tracked in `next-steps.md`.)
+
+### What landed
+
+**Domain (`domain/pos-recon/`)**
+
+- `entities.ts` — `POSRecord`, `ClaimBase`, `ShipAndDebitClaim`,
+  `PriceProtectionClaim`, `Claim` (union), `ClaimType`,
+  `ReconciliationResult`, `DiscrepancyFlag`, `DiscrepancyFlagKind`,
+  `DiscrepancySeverity`, `IsoDate`, `Money`. Dates stored as ISO
+  strings for serialization / timezone stability. Money is `number` in
+  the record's own currency (code stored per-record; tolerance is the
+  engine's problem, not the entity's).
+- `import.ts` — `mapPOSRecords`, `mapShipAndDebitClaims`,
+  `mapPriceProtectionClaims`, `mapClaims` (union-discriminated wrapper).
+  Each takes an ingested `Dataset` + a per-entity `ColumnMapping` and
+  returns `{ entities, issues }`. Coercion helpers strip currency
+  symbols (`$€£¥`) and commas from money fields, normalize dates to
+  `YYYY-MM-DD` in UTC. `MappingIssue` kinds: `missing_column`,
+  `empty_required`, `type_coerce`.
+
+**Store**
+
+- `store/slices/posRecordsSlice.ts` — `posRecords`, `addPOSRecords`,
+  `replacePOSRecordsForDataset`, `deletePOSRecordsForDataset`,
+  `clearPOSRecords`. Dataset-scoped ops so re-importing the same file
+  replaces rather than duplicates.
+- `store/slices/claimsSlice.ts` — mirror shape for `Claim[]`.
+- `store/slices/reconResultsSlice.ts` — engine output, populated by
+  P3. `lastReconAt` timestamp. Wholesale set/clear; no partial
+  mutation API (results regenerate atomically each run).
+- `store/waferiqStore.ts` — recomposed to spread all four slices
+  (`datasets` + 3 new). Same slice + persistKeys convention as legacy.
+
+**Tests (+8 new, 149/149 total across 23 files)**
+
+- `domain/pos-recon/import.test.ts` — POS projection happy path,
+  missing_column path, empty_required path, type_coerce path, currency
+  strip on money fields, S&D discrimination, PP discrimination,
+  `mapClaims` union.
+
+### Harness state
+
+- `npx tsc --noEmit` clean (fixed one strict index-signature error mid-batch
+  by widening a helper to `object` and casting internally).
+- `npm run lint` — 0 errors, same 3 pre-existing exhaustive-deps warnings.
+- `npm test` — 149/149 across 23 files.
+- `npm run build` — succeeds; route table unchanged from P1.
+
+### Verified vs unverified
+
+- Unit + build: green.
+- Manual verification NOT DONE. There is no UI wired to `mapPOSRecords`
+  yet — the bridge between `/ingest` and the entity slices is a
+  P2→P3 chore. Verifying today means writing a scratch script that
+  hydrates a fake `Dataset` and calls the mapper, which the tests
+  already do. Real-file verification happens when the bridge UI lands.
+
+### What unlocks next
+
+- **P3 — matching engine.** Now unblocked. Takes `POSRecord[]` +
+  `Claim[]`, emits `ReconciliationResult[]`. Owns matching
+  (part-number + customer + date-window + qty tolerance),
+  discrepancy-flag generation, calculated-credit math. Claude Agent
+  SDK integration lives here as an isolated module for fuzzy column
+  mapping / entity matching per the plan's cross-cutting rule.
+- **Small P2→P3 bridge UI.** Once P3 lands, a "run recon" button on
+  `/ingest` (or a new `/recon` route) is the minimum needed to see
+  the whole pipeline work end-to-end.
+
+### Follow-ups from P0/P1 still open
+
+- ESLint module boundaries (unchanged — still points at empty globs).
+- Shared libs pruning (unchanged — accounts still imports them).
+- P1 manual browser verification (unchanged — should happen alongside
+  the bridge UI work).
