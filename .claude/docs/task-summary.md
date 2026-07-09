@@ -2709,3 +2709,126 @@ deferred to when a discovery conversation surfaces anonymized data.
   surfaces a real POS + claims file pair.
 - **AgentMatcher.** Slot a Claude Agent SDK-backed `Matcher` in when
   we can wire API keys and pick a matching prompt.
+
+---
+
+## 2026-07-09 — WaferIQ P4: reconciliation dashboard
+
+Plan's P4 done-when: "a new user reaches a useful, exportable result
+on their own data, unaided, in under 10 minutes." The dashboard
+surface, drill-down, filters, and export are in place; the empirical
+under-10-minutes bar itself is next-batch verification.
+
+### Scope calls (not user-confirmed, defensible from plan)
+
+1. New top-level `/recon` route, same three-layer pattern as `/ingest`
+   (page.tsx server → ReconClient.tsx client wrapper → ReconApp.tsx
+   Zustand-using dashboard w/ `dynamic({ ssr: false })`).
+2. `/ingest` stays the intake surface; `ReconRunner` there shrinks to
+   a small nudge that links into `/recon`. Full metric cards + drill-
+   down live on `/recon` only, so users have one place to look at
+   results.
+3. Minimal top nav in `RootLayout` (`components/AppNav.tsx`, `WaferIQ`
+   brand + `Ingest` + `Recon` links). Hidden on `/login`. This closes
+   the "no shared nav" item that had been on the punch list since P0.
+4. One "chart" — an inline-SVG horizontal stacked bar of status
+   distribution. No d3 library needed for a single-bar layout; the
+   plan asked for D3 / no chart library, and inline SVG honors the
+   spirit without ceremony.
+5. Filters (status checkboxes + flag-kind checkboxes + free-text
+   search over POS partNumber/customer/distributor) run client-side
+   over the store's `reconResults`. Trivial for realistic dataset
+   sizes; virtualization is P5 concern.
+6. Drill-down is inline row expand, not modal — keeps the "under 10
+   minutes" flow snappy.
+7. Export uses SheetJS. One flat row per `ReconciliationResult` (POS
+   fields + claim ID list + flag list + credit) so the file opens
+   cleanly in Excel; per-claim breakdown is via app drill-down. Both
+   CSV and XLSX; XLSX is default for round-trippability.
+8. Export scope = **currently-filtered results**, not always all
+   results. Filter, then export. Discoverable via the button being
+   right next to the filters.
+
+### What landed
+
+**Pure logic (`lib/`)**
+
+- `reconView.ts` — `filterResults`, `summarize`, `indexById`,
+  `resolveResult`, `ReconFilters` type, plus `STATUS_LABEL` and
+  `FLAG_LABEL` maps. Kept out of React so filter + summary math are
+  testable in isolation.
+- `reconExport.ts` — `reconResultsToRows` (flattens Result + POS +
+  linked claims into `ExportRow`), `rowsToWorkbook` (SheetJS
+  workbook w/ `Reconciliation` sheet), `downloadWorkbook` (browser
+  Blob + <a download>).
+
+**UI (`components/recon/` + `app/recon/`)**
+
+- `SummaryHeader` — 4 metric cards (matched/flagged/missing/orphan),
+  total calculated credit, "at-risk" = sum of |amountImpact|,
+  last-run timestamp.
+- `StatusBar` — inline-SVG horizontal stacked bar, native `<title>`
+  tooltips per segment.
+- `FiltersBar` — search input, status chips, flag-kind chips, reset.
+- `ResultsTable` + `ResultRow` — click a row to expand.
+- `ResultDetail` — two-column POS record + claim list (S&D and PP
+  shapes rendered distinctly), plus flag list with severity color.
+- `ExportButtons` — CSV + XLSX buttons; disabled while empty.
+- `ReconApp` — orchestrates the whole page: empty-state helper when
+  nothing loaded, "ready to reconcile" state when POS + claims are
+  loaded but no run yet, then full dashboard once results exist.
+
+**Nav (`components/AppNav.tsx`)**
+
+- Sticky top bar wired into `app/layout.tsx` between `<body>` and the
+  page. Active state via `usePathname`. Hidden on `/login`.
+
+**Trim on `/ingest`**
+
+- `ReconRunner` (P3-era) shrunk to a nudge: recon counts + last-run
+  timestamp + a `Link` to `/recon`. Metric cards deleted here — they
+  live on `/recon` now.
+
+### Tests (+14 new, 199/199 total across 29 files)
+
+- `lib/reconView.test.ts` (9): summary math incl. flag impact,
+  filter by status / flag / search, AND semantics across filters,
+  empty POS excludes on search, resolveResult happy path.
+- `lib/reconExport.test.ts` (5): flatten shape, joined flag kinds
+  and joined messages, orphan_claim falls back to claim fields,
+  numeric-vs-empty on missing POS, workbook sheet name.
+
+### Harness state
+
+- `npx tsc --noEmit` clean.
+- `npm run lint` — 0 errors, same 3 pre-existing exhaustive-deps
+  warnings in parked map files.
+- `npm test` — 199/199 across 29 files (was 185/27).
+- `npm run build` — succeeds. `/recon` in the route table, static
+  prerender.
+
+### Verified vs unverified
+
+- Unit + build: green.
+- Manual browser verification: NOT DONE. This is the empirical
+  "under 10 minutes, unaided" bar the plan set for P4. Now the whole
+  chain is coherent enough to actually time it.
+
+### What unlocks next
+
+- **P5 — design-partner hardening.** Robust to malformed / large /
+  multi-period / multi-distributor inputs, local persistence so
+  datasets and results survive refresh, self-serve onboarding, usage
+  instrumentation for the retention thesis, pricing-gating hooks
+  (seams, not enforcement).
+- **Partner-real data.** Still deferred. First discovery conversation
+  that yields real files is the natural moment.
+- **AgentMatcher.** Still deferred until API keys + prompt.
+
+### Follow-ups from earlier phases still open
+
+- ESLint module boundaries (unchanged).
+- Shared libs pruning (unchanged; accounts still imports them).
+- Local persistence — the impact grew this batch. Datasets, entities,
+  AND recon results all die on refresh now. Bumping this into P5
+  proper.

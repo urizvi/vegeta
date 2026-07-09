@@ -22,10 +22,6 @@ funnel deferred as a possible sibling wedge later.
   `legacy/components/territory/**` or drop the block. Test at
   `test/eslint-boundaries.test.ts` synthesizes fake paths so it passes
   regardless; both files move or both stay.
-- [ ] **Nav.** No shared nav lives in `RootLayout`. Users reach `/ingest`
-  via the root redirect, but there's no way to jump between
-  `/ingest` ↔ `/accounts` ↔ (later) `/results`. A minimal top-bar link
-  set would help even before P4.
 - [ ] **Manual browser verification of the ingest → mapping flow.**
   Now that the bridge UI (`EntityMappingPanel` under each dataset in
   `/ingest`) is wired, this is the moment to `npm run dev` + drop a
@@ -57,20 +53,23 @@ funnel deferred as a possible sibling wedge later.
   + `matcher.ts` + `normalize.ts`. Reconcile POS ↔ claims with qty
   tolerance, soft + hard date windows, per-claim-type price checks,
   duplicate detection, calculated-credit math. `Matcher` interface is
-  the seam for a future Agent SDK integration. Minimal
-  `ReconRunner` on `/ingest` shows counts + timestamp; full drill-down
-  is P4.
+  the seam for a future Agent SDK integration.
+- [x] **P4 — recon dashboard.** `/recon` route with summary metrics +
+  distribution bar + filters (status/flag/search) + drill-down rows
+  showing POS record and linked claims + CSV/XLSX export. Top nav
+  in `RootLayout` (WaferIQ / Ingest / Recon). `ReconRunner` on
+  `/ingest` shrunk to a "go to /recon" nudge.
 
 ## Next
 
-- [ ] **P4 — recon dashboard.** Dedicated `/recon` route (or under
-  `/ingest`) with a results table, filter by status/flag, drill-down
-  from a POS row to matched claims and vice versa, CSV/XLSX export
-  round-trip. D3 for any charts (no chart library). Under-10-minute
-  unaided time-to-first-value target.
 - [ ] **P5 — design-partner hardening.** Robust to malformed / large /
   multi-period / multi-distributor inputs, self-serve onboarding, usage
   instrumentation for the retention thesis, pricing-gating hooks.
+- [ ] **Manual browser verification of the whole chain.** With P4
+  landed, one session can now exercise P1 → P2 → P3 → P4. Drop a
+  real POS file, drop a claims file, map both, hit Reconcile on
+  `/recon`, filter/drill-down/export. This is the "under 10 minutes,
+  unaided" done-when the plan set for P4.
 
 ## Deferred to when we can wire it
 
