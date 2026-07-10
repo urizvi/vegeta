@@ -2225,3 +2225,884 @@ Also caught mid-matrix: Directus JWT expires at 15 min and the app didn't auto-r
 - **Manual smoke matrix** — PARTIAL (4/11). Resume by saying "resume smoke matrix"; checklist lives in conversation, not yet codified.
 
 Remaining limitations from 2026-05-22 entry unchanged: workspace-backfill progress toast not implemented; 3 territory-map files have pre-existing uncommitted modifications.
+
+---
+
+## 2026-07-06 — WaferIQ pivot: P0 decouple & stabilize
+
+The prior CRM evolution roadmap (Phase 1 multi-tenant Accounts shipped;
+Phases 2–4 planned) is **shelved**. The app is being repointed off
+territory planning onto **WaferIQ** — a daily-pain wedge for semiconductor
+distributors / design-win teams. The wedge itself (POS/sell-through
+reconciliation vs design-win funnel) is gated on customer discovery. Prior
+smoke-matrix work (7 unchecked items) is paused indefinitely.
+
+Six engineering phases planned: P0 decouple/stabilize (this batch), P1
+wedge-agnostic ingestion (safe to start next), then P2–P5 gated on the
+discovery decision. See `.claude/docs/store-shape.md` for the pre-P2 store
+audit produced this pass.
+
+### Git surface
+
+- Two closeout commits landed on `main` (Directus computed-fields column
+  bootstrap + mapper alias bug; territory-map RU/CA projection tuning) —
+  these clear the pre-existing dirty tree so v-territory captures real
+  state, not WIP.
+- Tag `v-territory` marks the final territory-era commit.
+- Branch `pivot/waferiq` cut off `v-territory`. All P0+ work lives here.
+
+### P0 changes on pivot/waferiq
+
+- `lib/legacyFlags.ts` — `isLegacyTerritoryEnabled()` reading
+  `NEXT_PUBLIC_LEGACY_TERRITORY_ENABLED`. Documented in
+  `.env.local.example`. Default OFF.
+- `git mv components/territory → legacy/components/territory` and
+  `git mv app/territory/TerritoryClient.tsx → legacy/app/TerritoryClient.tsx`.
+  Internal `@/components/territory/*` imports inside the moved tree
+  rewritten to `@/legacy/components/territory/*`.
+- `app/territory/page.tsx` recreated as a flag-gated proxy: `notFound()`
+  when flag off; dynamic import of the moved client when on. Preserves the
+  route surface without loading map libs on the critical path.
+- `app/page.tsx` root redirect changed from `/territory` → `/accounts`. As
+  long as the flag stays off, `react-simple-maps` + `d3-geo` never enter
+  the initial critical render path; they remain in `node_modules` and
+  importable from legacy.
+- Shared libs (`lib/territoryIndex.ts`, `lib/regionData.ts`,
+  `lib/geoTreeFilter.ts`, `lib/choropleth.ts`, `lib/geoUtils.ts`,
+  `hooks/useGeoData.ts`) NOT moved — consumed by non-territory surfaces
+  (accounts). Documented as a P2 pruning target in `store-shape.md`.
+- Store slices NOT reshaped — all 15 remain composed into
+  `useTerritoryStore`. `store-shape.md` documents each slice's fate under
+  WaferIQ (delete / reshape / keep) so P2 has a written map.
+- Empty shells created: `ingestion/`, `domain/`, `views/`, each with a
+  README stating the phase and intent.
+- `CLAUDE.md` updated: fixed stale "no test suite" claim; added pivot
+  status.
+- ESLint boundary rules in `eslint.config.mjs` NOT updated — the module
+  boundaries still target `components/territory/**` glob paths that no
+  longer contain code. `test/eslint-boundaries.test.ts` still passes
+  because it synthesizes fake file paths. **Follow-up:** either update the
+  rules to target the new legacy paths or drop them (they're guarding
+  code that's no longer active).
+
+### Harness state
+
+- `npx tsc --noEmit` clean.
+- `npm run lint` — 0 errors, 3 pre-existing warnings (all in the moved
+  DrillDownMapView / WorldMapView, `react-hooks/exhaustive-deps`).
+- `npm test` — 112/112 pass across 18 files.
+
+### What unlocks next
+
+- **P1 ingestion foundation.** Wedge-agnostic — safe to start under
+  `ingestion/` before discovery names the wedge. CSV/XLSX intake, column
+  mapping, canonical model, validation, Zustand persistence.
+- **Discovery.** Until it names the wedge, do not populate `domain/` or
+  `views/` — the P1→P2 gate is real per the plan.
+
+### Limitations / follow-ups
+
+- The 4 shelved smoke-matrix items (5–11) are officially deferred, not
+  resumed. The last-run state (4/11 verified against `Margin = TAM-SAM`)
+  is preserved above.
+- ESLint module boundaries need to be updated to reflect the new paths (or
+  dropped) — noted above.
+- Store still exposes 15 slices via `useTerritoryStore`; renaming +
+  pruning is a P2 task, not P0.
+
+---
+
+## 2026-07-06 — WaferIQ P1: wedge-agnostic ingestion foundation
+
+P1 lands the ingest-normalize-persist pipeline. Wedge-agnostic per the
+plan — no entity schemas yet (those are P2). Goal per the plan: "you can
+drop a real, messy file in and get a clean, validated dataset out."
+
+### Scope calls made up-front (not user-confirmed, defensible from plan)
+
+1. **New Zustand store** (`store/waferiqStore.ts`) rather than a slice on
+   the legacy `useTerritoryStore`. Matches the "separate store may be
+   cleaner" note in `store-shape.md`; keeps ingested datasets from
+   entangling with parked territory state. Future consolidation is
+   mechanical if we ever unify.
+2. **No target schema in P1.** Canonical model is loose: `Dataset` with
+   typed `Column`s and dynamic `Row`s. Column "mapping" = rename headers,
+   override inferred types, toggle required, discard. Mapping to entity
+   fields is P2's job (entities don't exist yet).
+3. **In-memory persistence only.** Plan lists local persistence as
+   optional; deferring to P5 to keep P1 tight.
+4. **Root redirect updated** `/accounts` → `/ingest` — the wedge-agnostic
+   surface is now the natural landing. Legacy `/accounts` still works;
+   territory still parked behind the flag.
+
+### What landed
+
+**Ingestion core (`ingestion/`)**
+
+- `types.ts` — `Dataset`, `Column`, `Row`, `ColumnType`, `ImportSource`,
+  `ValidationIssue{Kind}`, `ParsedSheet`. Deliberately loose.
+- `parse.ts` — `parseFile(file)` (browser) + `parseArrayBuffer(buf, name)`
+  (testable). Uses SheetJS with `cellDates: true`. Multi-sheet workbooks:
+  picks first non-empty sheet, tracks the rest in `otherSheets` for
+  UI surfacing. Empty cells → null. Empty headers → "Column N". Throws
+  `ParseError` on unreadable / empty-sheets input.
+- `infer.ts` — `inferColumnType(cells)`: date > number > boolean > text
+  priority (dates are the most specific due to narrow regex; number over
+  boolean so 0/1 columns infer as number). `coerceCell(raw, type)`: returns
+  null on empty or coercion failure (caller decides whether that's an issue).
+- `columns.ts` — `initialColumns(sheet)`: derives one `Column` per header
+  with slugified stable keys, disambiguates collisions, infers per-column type.
+- `validate.ts` — `buildDataset(sheet, columns)`: coerces rows to typed
+  `Row` objects. Emits `type_mismatch` on non-empty cell coercion failure,
+  `empty_required` on empty cells in required columns. Bad rows still land
+  in output with null for the failed cell (P1 doesn't filter — that's
+  P2/P3 concern).
+
+**Store**
+
+- `store/waferiqStore.ts` — new `useWaferiqStore` composed from
+  `store/slices/datasetsSlice.ts` (`datasets`, `staged`, `startImport`,
+  `updateStagedColumn`, `cancelImport`, `commitDataset`, `deleteDataset`).
+  Same slice + persistKeys convention as the legacy store.
+
+**UI**
+
+- `/ingest` route: `app/ingest/page.tsx` (server, metadata) →
+  `IngestClient.tsx` (client, dynamic-imports `IngestApp` with `ssr:false`)
+  → `IngestApp.tsx` (Zustand + orchestration). This three-layer pattern
+  works around Next 16's rule that `dynamic({ ssr: false })` can only live
+  inside a Client Component (matches the legacy territory pattern).
+- Components in `components/ingest/`: `DropZone`, `ColumnMappingTable`,
+  `ValidationSummary`, `DatasetList`. Uses existing design tokens
+  (`--surface-*`, `--ink-*`, `--brand`).
+- Root `app/page.tsx` redirect switched `/accounts` → `/ingest`.
+
+**Tests (+29 new, 141/141 total)**
+
+- `ingestion/parse.test.ts` (5) — hits `parseArrayBuffer` directly
+  because jsdom's `File.arrayBuffer` and `Response(file).arrayBuffer`
+  don't work as they do in real browsers.
+- `ingestion/infer.test.ts` (14) — inferColumnType priority, coerceCell
+  edge cases, date narrowness, 0/1-as-number preference.
+- `ingestion/columns.test.ts` (5) — slug keys, collision disambiguation,
+  fallback to `col_N`, per-column inference, defaults.
+- `ingestion/validate.test.ts` (5) — coercion, mismatch issues,
+  required-empty issues, discarded columns, missing source columns.
+
+### Harness state
+
+- `npx tsc --noEmit` clean.
+- `npm run lint` — 0 errors, same 3 pre-existing exhaustive-deps warnings
+  in the parked map files.
+- `npm test` — 141/141 across 22 files (was 112/18).
+- `npm run build` — succeeds. All 16 routes prerender; `/ingest` static.
+
+### Verified vs unverified
+
+- **Unit + build: green.**
+- **Manual browser verification: NOT DONE in this batch.** Plan's P1
+  "done when" is empirical — drop a real messy file, see it round-trip.
+  Next step: `npm run dev`, drop distributor POS or design-win export in
+  `/ingest`, confirm the mapping + validation surface behaves.
+
+### What unlocks next
+
+- **Discovery gate.** P2+ blocked until customer discovery names the
+  wedge. Do NOT populate `domain/` or `views/` before then.
+- **Optional between-phase polish** (won't block P2):
+  - Local persistence (localStorage / IndexedDB) — currently datasets die
+    on refresh. Bump to P5 unless a discovery interview needs it sooner.
+  - Sample-data CSV in `public/` for hero-page demoing without a real file.
+  - Better staged import name defaulting (filename-sans-ext already, but
+    could pull from the sheet name for XLSX).
+
+### Follow-ups from P0 still open
+
+- ESLint module boundaries still point at empty `components/territory/**`
+  globs. Update or drop when P2 lands.
+- Shared libs (`lib/territoryIndex.ts`, etc.) still colocated with active
+  code; prune under P2.
+
+---
+
+## 2026-07-09 — WaferIQ P2: POS-recon data model
+
+### Wedge decision
+
+Locked as **POS / sell-through reconciliation.** Design-win funnel
+tracking deferred to a possible sibling wedge later, not killed. Choice
+was made without formal discovery, based on the four-point argument
+recorded in `[[waferiq-pivot]]` memory: dollar-attached pain per event,
+monthly-close cadence matches the retention thesis directly, moat is a
+matching algorithm horizontal tools can't replicate cleanly, and the
+core is testable with objective correctness. User asked for a
+recommendation, took it.
+
+### Scope calls (not user-confirmed, defensible from plan)
+
+1. Wedge domain lives at `domain/pos-recon/` so a `design-win-funnel/`
+   sibling is a clean add later.
+2. Claims modeled as a **discriminated union** `Claim = ShipAndDebit |
+   PriceProtection` with shared base fields, so the P3 matcher walks
+   them uniformly.
+3. `DiscrepancyFlag` is a nested type on `ReconciliationResult`, not a
+   top-level entity. Flags don't exist independently of results.
+4. **Store: added new slices, did not rename or reshape the legacy
+   `useTerritoryStore`.** The plan says "reshape Zustand stores" — read
+   as reshaping the wedge store (`waferiqStore`), not renaming the
+   legacy artifact that still powers parked accounts/teams/tasks routes.
+   Renaming rippled across those routes would be a big diff for
+   cosmetic gain and violates "legacy parked not deleted."
+5. **No matching engine here.** P2 is data model only; P3 owns matching.
+6. **No UI here.** P4 owns the recon dashboard. `/ingest` still works
+   and is enough to see rows land in the new slices via the mapper.
+   (The bridge UI that lets a user pick a dataset and hit `mapPOSRecords`
+   is a small P2→P3 chore, tracked in `next-steps.md`.)
+
+### What landed
+
+**Domain (`domain/pos-recon/`)**
+
+- `entities.ts` — `POSRecord`, `ClaimBase`, `ShipAndDebitClaim`,
+  `PriceProtectionClaim`, `Claim` (union), `ClaimType`,
+  `ReconciliationResult`, `DiscrepancyFlag`, `DiscrepancyFlagKind`,
+  `DiscrepancySeverity`, `IsoDate`, `Money`. Dates stored as ISO
+  strings for serialization / timezone stability. Money is `number` in
+  the record's own currency (code stored per-record; tolerance is the
+  engine's problem, not the entity's).
+- `import.ts` — `mapPOSRecords`, `mapShipAndDebitClaims`,
+  `mapPriceProtectionClaims`, `mapClaims` (union-discriminated wrapper).
+  Each takes an ingested `Dataset` + a per-entity `ColumnMapping` and
+  returns `{ entities, issues }`. Coercion helpers strip currency
+  symbols (`$€£¥`) and commas from money fields, normalize dates to
+  `YYYY-MM-DD` in UTC. `MappingIssue` kinds: `missing_column`,
+  `empty_required`, `type_coerce`.
+
+**Store**
+
+- `store/slices/posRecordsSlice.ts` — `posRecords`, `addPOSRecords`,
+  `replacePOSRecordsForDataset`, `deletePOSRecordsForDataset`,
+  `clearPOSRecords`. Dataset-scoped ops so re-importing the same file
+  replaces rather than duplicates.
+- `store/slices/claimsSlice.ts` — mirror shape for `Claim[]`.
+- `store/slices/reconResultsSlice.ts` — engine output, populated by
+  P3. `lastReconAt` timestamp. Wholesale set/clear; no partial
+  mutation API (results regenerate atomically each run).
+- `store/waferiqStore.ts` — recomposed to spread all four slices
+  (`datasets` + 3 new). Same slice + persistKeys convention as legacy.
+
+**Tests (+8 new, 149/149 total across 23 files)**
+
+- `domain/pos-recon/import.test.ts` — POS projection happy path,
+  missing_column path, empty_required path, type_coerce path, currency
+  strip on money fields, S&D discrimination, PP discrimination,
+  `mapClaims` union.
+
+### Harness state
+
+- `npx tsc --noEmit` clean (fixed one strict index-signature error mid-batch
+  by widening a helper to `object` and casting internally).
+- `npm run lint` — 0 errors, same 3 pre-existing exhaustive-deps warnings.
+- `npm test` — 149/149 across 23 files.
+- `npm run build` — succeeds; route table unchanged from P1.
+
+### Verified vs unverified
+
+- Unit + build: green.
+- Manual verification NOT DONE. There is no UI wired to `mapPOSRecords`
+  yet — the bridge between `/ingest` and the entity slices is a
+  P2→P3 chore. Verifying today means writing a scratch script that
+  hydrates a fake `Dataset` and calls the mapper, which the tests
+  already do. Real-file verification happens when the bridge UI lands.
+
+### What unlocks next
+
+- **P3 — matching engine.** Now unblocked. Takes `POSRecord[]` +
+  `Claim[]`, emits `ReconciliationResult[]`. Owns matching
+  (part-number + customer + date-window + qty tolerance),
+  discrepancy-flag generation, calculated-credit math. Claude Agent
+  SDK integration lives here as an isolated module for fuzzy column
+  mapping / entity matching per the plan's cross-cutting rule.
+- **Small P2→P3 bridge UI.** Once P3 lands, a "run recon" button on
+  `/ingest` (or a new `/recon` route) is the minimum needed to see
+  the whole pipeline work end-to-end.
+
+### Follow-ups from P0/P1 still open
+
+- ESLint module boundaries (unchanged — still points at empty globs).
+- Shared libs pruning (unchanged — accounts still imports them).
+- P1 manual browser verification (unchanged — should happen alongside
+  the bridge UI work).
+
+---
+
+## 2026-07-09 — WaferIQ P2 bridge UI: /ingest → POS-recon entities
+
+Small batch to close the gap between P1 (raw datasets) and P2 (typed
+POS-recon entities). Not a phase in the plan; the P2 done-when only
+required the data model, but the P2 entry called this out as the
+missing user-facing seam. Landing it now unblocks manual verification.
+
+### What landed
+
+- `domain/pos-recon/suggest.ts` — heuristic column-to-entity-field
+  suggester. Synonym tables per entity kind (POS, S&D, PP) covering
+  realistic distributor headers ('MPN', 'Disti', 'Qty', 'Ext Total',
+  'Auth #', etc.). Scoring: exact = 100, normalized substring = 70,
+  token-boundary match = 50. Never fuzzy — false positives are more
+  harmful than false negatives when the next step is coercion. Fields
+  are processed longest-synonym-list first so specific fields
+  (`authorizedPrice`) claim their column before generic ones (`price`).
+  Placeholder for a Claude Agent SDK integration in P3.
+- `components/ingest/EntityMappingPanel.tsx` — inline panel:
+  entity-kind picker, per-field column dropdowns seeded from the
+  suggester, "Run mapping" button, outcome summary. Uses the `key`
+  remount pattern (`<MappingForm key={kind} />`) so switching entity
+  kind resets the form cleanly — avoids the `set-state-in-effect`
+  antipattern that Next 16 / React 19 lint now flags.
+- `components/ingest/DatasetList.tsx` — expand toggle per dataset,
+  entity counts (POS records, S&D claims, PP claims), cascading delete
+  so removing a dataset drops its parked entities via the slice APIs.
+- Claim replacement logic: when running the mapper for one claim type,
+  keep this-dataset claims of the OTHER type intact (a dataset may
+  legitimately produce both from separate passes).
+
+### Tests (+7 new, 156/156 total across 24 files)
+
+- `domain/pos-recon/suggest.test.ts` — canonical snake_case matching,
+  distributor-style synonyms ('Disti', 'MPN', 'Qty'), no-double-claim
+  invariant, no-match returns empty, discarded columns ignored, S&D
+  cost/authorized synonyms, PP original/new/effective synonyms.
+
+### Harness state
+
+- `npx tsc --noEmit` clean.
+- `npm run lint` — 0 errors (fixed a `react-hooks/set-state-in-effect`
+  error mid-batch by dropping the useEffect reset in favor of `key`
+  remount). Same 3 pre-existing exhaustive-deps warnings in parked map
+  files.
+- `npm test` — 156/156 across 24 files.
+- `npm run build` — succeeds. Route table unchanged.
+
+### Verified vs unverified
+
+- Unit + build: green.
+- Manual browser verification: NOT DONE. Now genuinely unblocked
+  though — bridge UI exists, POS-recon slices exist, ingestion parser
+  exists. Next-steps.md prioritizes this.
+
+### What unlocks next
+
+- **P3 — matching engine.** Real work now. Consumes `POSRecord[]` +
+  `Claim[]` from `useWaferiqStore`, emits `ReconciliationResult[]`
+  via `setReconResults`. Matching algorithm + tolerance + discrepancy
+  flag generation. Claude Agent SDK as an isolated fuzzy-matching
+  module. Test against real anonymized partner data per the plan.
+
+---
+
+## 2026-07-09 — WaferIQ P3: POS reconciliation engine
+
+Plan's P3 done-when: "real input produces correct flags/metrics, proven
+by fixture tests." Landing all the mechanics; partner-real fixtures are
+deferred to when a discovery conversation surfaces anonymized data.
+
+### Scope calls (not user-confirmed, defensible from plan)
+
+1. Engine + matcher + normalize in three files, not over-modularized.
+2. **`Matcher` interface + `LocalMatcher` only** in P3. Real Claude
+   Agent SDK integration deferred until API keys are wired — the seam
+   is the module boundary the plan wanted.
+3. Sensible `defaultConfig`; overridable via param. No settings UI yet.
+4. Minimal `ReconRunner` UI on `/ingest` so the engine is invokable
+   end-to-end without a scratch script. Full drill-down = P4.
+5. Fixtures are synthetic and cover every flag kind. Partner-real
+   fixture ingestion is a follow-up.
+
+### What landed
+
+**Engine core (`domain/pos-recon/`)**
+
+- `normalize.ts` — `normalizePartNumber` (uppercase, strip
+  non-alphanumerics), `normalizeCustomer` (lowercase, drop punctuation,
+  strip common suffixes: Inc/Ltd/GmbH/Corp/…), `dateDiffDays` (absolute
+  int days between ISO dates; NaN on unparseable).
+- `matcher.ts` — `Matcher` interface with `customerScore(a, b)` and
+  `partScore(a, b)` returning `[0, 1]`. `LocalMatcher` default: exact-
+  after-normalize = 1.0, prefix/suffix relationship = 0.7, else 0.
+  Deliberately conservative — no edit-distance fuzz; false positives
+  in recon cost users real money, so ambiguous cases should end up in
+  the flagged bucket via the engine, not silently pass. `AgentMatcher`
+  is the follow-up; interface is the seam.
+- `engine.ts` — `reconcile(pos, claims, config?, matcher?)` returning
+  `ReconciliationResult[]`. Three passes:
+  1. Bucket POS by `(distributor | normalizedPart)`; for each claim,
+     find best-scoring POS candidate above `customerScoreThreshold`
+     and within `hardDateWindowDays`. Beyond hard window → treat as
+     unmatched entirely.
+  2. Build one result per POS row. Empty → `missing_claim`. Non-empty
+     → collect flags via `buildFlagsForMatch`; `matched` if flags
+     empty else `flagged`. Compute `calculatedCredit` per claim
+     type (S&D: (cost − authorized) × qty; PP: (original − new) × qty).
+  3. Any claim not linked to a POS row → `orphan_claim` result.
+- `defaultConfig`: qty tolerance ±5%, soft date window 30d, hard 90d,
+  customer score threshold 0.7, price-mismatch threshold ±5%, strict
+  distributor on.
+
+**Flags emitted**
+
+- `missing_claim` (warning) — POS with no claim.
+- `orphan_claim` (error) — Claim with no POS.
+- `quantity_mismatch` (error) — Total claim qty for a POS row outside
+  tolerance; `amountImpact` = (Δqty × resalePrice).
+- `price_mismatch` (error) — **S&D only.** POS resalePrice vs
+  authorizedPrice outside threshold. PP doesn't fire this — no
+  POS-side "expected new price" to compare against; that's semantics
+  we'd need a separate price sheet for.
+- `date_out_of_window` (warning) — Claim period vs POS shipDate
+  outside soft window but within hard.
+- `duplicate_claim` (warning) — Multiple claims tied to one POS row.
+
+**UI**
+
+- `components/ingest/ReconRunner.tsx` — mounts on `/ingest` above the
+  dataset list. Hidden while both slices are empty. Shows POS + claim
+  counts, "Run reconciliation" button (disabled unless both slices
+  non-empty), post-run metric cards (matched / flagged / missing /
+  orphan) and total calculated credit. Full drill-down (per-row
+  claim links, per-flag filtering, export) is P4.
+
+### Tests (+29 new, 185/185 total across 27 files)
+
+- `normalize.test.ts` (6): part number normalization, customer suffix
+  stripping, dateDiffDays incl. NaN.
+- `matcher.test.ts` (7): exact / prefix / unrelated / empty cases for
+  both scorers.
+- `engine.test.ts` (16): happy-path S&D + PP matches with correct
+  credit math, every flag kind, tolerance boundaries, hard-window
+  rejection, matcher normalization behavior end-to-end, determinism
+  across input orderings, empty inputs, config override.
+
+### Harness state
+
+- `npx tsc --noEmit` clean.
+- `npm run lint` — 0 errors, same 3 pre-existing exhaustive-deps
+  warnings in parked map files.
+- `npm test` — 185/185 across 27 files (was 156/24).
+- `npm run build` — succeeds; route table unchanged.
+
+### Verified vs unverified
+
+- Unit + build: green.
+- Manual browser verification: still NOT DONE (unchanged from bridge
+  UI batch). Now the whole ingest → map → reconcile chain is invokable
+  from `/ingest`, so a single browser session can exercise P1 through
+  P3.
+
+### What unlocks next
+
+- **P4 — recon dashboard.** Results table, filter by status/flag,
+  drill-down from a POS row to matched claims and vice versa, CSV/XLSX
+  export. Under-10-minute unaided time-to-first-value target.
+- **Real partner fixtures.** The plan's cross-cutting rule says test
+  against anonymized real data. Do this when a discovery conversation
+  surfaces a real POS + claims file pair.
+- **AgentMatcher.** Slot a Claude Agent SDK-backed `Matcher` in when
+  we can wire API keys and pick a matching prompt.
+
+---
+
+## 2026-07-09 — WaferIQ P4: reconciliation dashboard
+
+Plan's P4 done-when: "a new user reaches a useful, exportable result
+on their own data, unaided, in under 10 minutes." The dashboard
+surface, drill-down, filters, and export are in place; the empirical
+under-10-minutes bar itself is next-batch verification.
+
+### Scope calls (not user-confirmed, defensible from plan)
+
+1. New top-level `/recon` route, same three-layer pattern as `/ingest`
+   (page.tsx server → ReconClient.tsx client wrapper → ReconApp.tsx
+   Zustand-using dashboard w/ `dynamic({ ssr: false })`).
+2. `/ingest` stays the intake surface; `ReconRunner` there shrinks to
+   a small nudge that links into `/recon`. Full metric cards + drill-
+   down live on `/recon` only, so users have one place to look at
+   results.
+3. Minimal top nav in `RootLayout` (`components/AppNav.tsx`, `WaferIQ`
+   brand + `Ingest` + `Recon` links). Hidden on `/login`. This closes
+   the "no shared nav" item that had been on the punch list since P0.
+4. One "chart" — an inline-SVG horizontal stacked bar of status
+   distribution. No d3 library needed for a single-bar layout; the
+   plan asked for D3 / no chart library, and inline SVG honors the
+   spirit without ceremony.
+5. Filters (status checkboxes + flag-kind checkboxes + free-text
+   search over POS partNumber/customer/distributor) run client-side
+   over the store's `reconResults`. Trivial for realistic dataset
+   sizes; virtualization is P5 concern.
+6. Drill-down is inline row expand, not modal — keeps the "under 10
+   minutes" flow snappy.
+7. Export uses SheetJS. One flat row per `ReconciliationResult` (POS
+   fields + claim ID list + flag list + credit) so the file opens
+   cleanly in Excel; per-claim breakdown is via app drill-down. Both
+   CSV and XLSX; XLSX is default for round-trippability.
+8. Export scope = **currently-filtered results**, not always all
+   results. Filter, then export. Discoverable via the button being
+   right next to the filters.
+
+### What landed
+
+**Pure logic (`lib/`)**
+
+- `reconView.ts` — `filterResults`, `summarize`, `indexById`,
+  `resolveResult`, `ReconFilters` type, plus `STATUS_LABEL` and
+  `FLAG_LABEL` maps. Kept out of React so filter + summary math are
+  testable in isolation.
+- `reconExport.ts` — `reconResultsToRows` (flattens Result + POS +
+  linked claims into `ExportRow`), `rowsToWorkbook` (SheetJS
+  workbook w/ `Reconciliation` sheet), `downloadWorkbook` (browser
+  Blob + <a download>).
+
+**UI (`components/recon/` + `app/recon/`)**
+
+- `SummaryHeader` — 4 metric cards (matched/flagged/missing/orphan),
+  total calculated credit, "at-risk" = sum of |amountImpact|,
+  last-run timestamp.
+- `StatusBar` — inline-SVG horizontal stacked bar, native `<title>`
+  tooltips per segment.
+- `FiltersBar` — search input, status chips, flag-kind chips, reset.
+- `ResultsTable` + `ResultRow` — click a row to expand.
+- `ResultDetail` — two-column POS record + claim list (S&D and PP
+  shapes rendered distinctly), plus flag list with severity color.
+- `ExportButtons` — CSV + XLSX buttons; disabled while empty.
+- `ReconApp` — orchestrates the whole page: empty-state helper when
+  nothing loaded, "ready to reconcile" state when POS + claims are
+  loaded but no run yet, then full dashboard once results exist.
+
+**Nav (`components/AppNav.tsx`)**
+
+- Sticky top bar wired into `app/layout.tsx` between `<body>` and the
+  page. Active state via `usePathname`. Hidden on `/login`.
+
+**Trim on `/ingest`**
+
+- `ReconRunner` (P3-era) shrunk to a nudge: recon counts + last-run
+  timestamp + a `Link` to `/recon`. Metric cards deleted here — they
+  live on `/recon` now.
+
+### Tests (+14 new, 199/199 total across 29 files)
+
+- `lib/reconView.test.ts` (9): summary math incl. flag impact,
+  filter by status / flag / search, AND semantics across filters,
+  empty POS excludes on search, resolveResult happy path.
+- `lib/reconExport.test.ts` (5): flatten shape, joined flag kinds
+  and joined messages, orphan_claim falls back to claim fields,
+  numeric-vs-empty on missing POS, workbook sheet name.
+
+### Harness state
+
+- `npx tsc --noEmit` clean.
+- `npm run lint` — 0 errors, same 3 pre-existing exhaustive-deps
+  warnings in parked map files.
+- `npm test` — 199/199 across 29 files (was 185/27).
+- `npm run build` — succeeds. `/recon` in the route table, static
+  prerender.
+
+### Verified vs unverified
+
+- Unit + build: green.
+- Manual browser verification: NOT DONE. This is the empirical
+  "under 10 minutes, unaided" bar the plan set for P4. Now the whole
+  chain is coherent enough to actually time it.
+
+### What unlocks next
+
+- **P5 — design-partner hardening.** Robust to malformed / large /
+  multi-period / multi-distributor inputs, local persistence so
+  datasets and results survive refresh, self-serve onboarding, usage
+  instrumentation for the retention thesis, pricing-gating hooks
+  (seams, not enforcement).
+- **Partner-real data.** Still deferred. First discovery conversation
+  that yields real files is the natural moment.
+- **AgentMatcher.** Still deferred until API keys + prompt.
+
+### Follow-ups from earlier phases still open
+
+- ESLint module boundaries (unchanged).
+- Shared libs pruning (unchanged; accounts still imports them).
+- Local persistence — the impact grew this batch. Datasets, entities,
+  AND recon results all die on refresh now. Bumping this into P5
+  proper.
+
+---
+
+## 2026-07-09 — WaferIQ P5: design-partner hardening infrastructure
+
+Plan's P5 outcome-done-when — "1–2 partners use it weekly on live data
+and you can measure whether they return" — isn't ship-able as code.
+What is ship-able is the infrastructure that makes that outcome
+possible: persistence so a weekly return isn't punished, usage
+counters so return is measurable, self-serve so a partner can walk
+the flow unassisted, robustness polish so the first hiccup doesn't
+break trust. All of that landed. The partner conversation itself is
+tracked in next-steps.md.
+
+### Scope calls (not user-confirmed, defensible from plan)
+
+1. **Persistence via zustand's `persist` middleware** wrapping a
+   size-guarded storage adapter, not a bespoke `exportState`/
+   `importState` API. The middleware handles rehydration, versioning,
+   and partial state selection; the adapter adds the guardrails.
+2. **Size-guarded storage adapter** with a soft byte-cap (default
+   4 MB) and QuotaExceededError catch. On either trigger, the store
+   silently falls back to in-memory writes for the rest of the
+   session; the UI surfaces a small "storage disabled" banner via a
+   subscribable status. Backing store injectable for tests.
+3. **Usage as a persisted store slice**, not a separate lib +
+   localStorage wrapper. Composes with existing slice pattern; means
+   `HealthPanel` uses the same `useWaferiqStore` hook everything else
+   does.
+4. **`HealthPanel` visible on `/recon`**, not gated behind a debug
+   toggle. The retention-thesis metric ("return rate = visit-days /
+   span-days") is the whole point of P5 — hiding it defeats measurement.
+5. **Pricing-gate seam is `checkGate` + `useGate` today**, both
+   returning true. `ExportButtons` is the reference consumer so future
+   tier work has a real example. Not enforcing anything now; the plan
+   says "make the seam exist."
+6. **Sample data as three static CSVs in `public/sample/`.** Fetched
+   via `parseArrayBuffer` (browser can't build a proper `File` from
+   `fetch`, but our test-driven refactor of the parser already exposed
+   both entry points). Small (8 POS rows, 6 S&D, 2 PP) but shaped like
+   real distributor exports so the suggester heuristics have something
+   to bite.
+7. **Robustness polish is narrow**: file-size warning at >10 MB (not
+   an error — big files are legitimate), better ParseError UI, storage
+   banner. Explicitly *not* virtualizing the mapping/results tables;
+   punt on that until it hurts.
+
+### What landed
+
+**Persistence (`store/`)**
+
+- `persistedStorage.ts` — `createGuardedStorage({ softCapBytes,
+  backing? })`. Injectable backing for tests. Emits status via
+  `getStorageState()` + `subscribeStorageState()`. Statuses:
+  `ok` | `disabled_quota` | `disabled_unavailable`.
+- `waferiqStore.ts` — recomposed with `persist(...)` middleware,
+  `partialize` selects only `PERSISTED_KEYS` (skips ephemeral
+  `staged` from datasetsSlice), `version: 1`, migration switch stubbed
+  for future schema bumps.
+
+**Usage (`store/slices/usageSlice.ts`)**
+
+- `firstSeenAt`, `lastSeenAt`, `visitDays[]` (unique ISO local-day
+  strings, sorted), `reconRuns`, `exportsCsv`, `exportsXlsx`,
+  `datasetImports`.
+- Actions: `recordVisit()`, `recordReconRun()`, `recordExport(fmt)`,
+  `recordDatasetImport()`, `resetUsage()`.
+- Wire points: `recordVisit` on IngestApp + ReconApp mount,
+  `recordReconRun` on ReconApp run, `recordExport` in ExportButtons,
+  `recordDatasetImport` in IngestApp commit + sample loader.
+
+**Gates (`lib/waferiqGates.ts`)**
+
+- `checkGate(feature)` (pure), `useGate(feature)` (memoized hook),
+  `assertGate(feature)` (throws when blocked).
+- Renamed from an earlier draft that used `useGate` throughout — React
+  rules-of-hooks lint (Next 16) demanded hook-shaped consumers, so
+  the pure form is `checkGate` and the hook is a `useMemo` wrapper.
+- Reference consumer: `ExportButtons`, which renders a 🔒 affordance
+  when a gate blocks (still unlocked visually today).
+
+**UI**
+
+- `components/HealthPanel.tsx` — usage stats grid + storage status
+  line, mounted at bottom of `/recon`.
+- `components/ingest/OnboardingCard.tsx` — 5-step intro + "Load sample
+  data" button, visible only when `datasets.length === 0`.
+- `app/ingest/IngestApp.tsx` — storage-status banner, sample-data
+  loader (fetches three CSVs, drives through the normal build path),
+  large-file warning (>10 MB soft threshold), clearer parse-error UI.
+- `app/recon/ReconApp.tsx` — records visit + run, mounts `HealthPanel`.
+
+**Sample data (`public/sample/`)**
+
+- `pos.csv` (8 rows across 2 distributors, 4 parts, 6 customers).
+- `sd_claims.csv` (6 rows; one intentional orphan — "Ghost Trading" —
+  to demo an orphan_claim; one intentional qty mismatch on Avnet/DEF-4567
+  to demo a quantity_mismatch).
+- `pp_claims.csv` (2 rows tied to the two POS rows with matching
+  distributors/customers).
+
+### Tests (+14 new, 216/216 total across 32 files)
+
+- `store/persistedStorage.test.ts` (5): backing read/write, quota-error
+  fallback, byte-cap enforcement, subscriber notification, null-backing
+  fallback.
+- `store/slices/usageSlice.test.ts` (7): initial zeros, `firstSeenAt`
+  set-once, day-uniqueness in `visitDays`, monotonic counters, per-format
+  export bump, dataset-import bump, `resetUsage` clears everything.
+- `lib/waferiqGates.test.ts` (2 describe blocks, 5 tests): every gate
+  currently allowed for both `checkGate` and `assertGate`.
+
+### Harness state
+
+- `npx tsc --noEmit` clean.
+- `npm run lint` — 0 errors (fixed a `react-hooks/rules-of-hooks`
+  error mid-batch by splitting `checkGate`/`useGate`). Same 3
+  pre-existing exhaustive-deps warnings in parked map files.
+- `npm test` — 216/216 across 32 files (was 199/29).
+- `npm run build` — succeeds. Route table unchanged.
+
+### Verified vs unverified
+
+- Unit + build: green.
+- Manual browser verification: still NOT DONE. Now especially worth
+  doing since persistence changes the failure mode — instead of "recon
+  died on refresh," a bug in persist would look like "state didn't
+  come back correctly." Should verify with sample data first.
+
+### Explicitly deferred from P5
+
+- **Real auth.** No backend. Local-persistence covers durability for a
+  single-user browser. Multi-user / workspace is separate.
+- **Server-side analytics beacon.** Same — needs backend. Local
+  counters are user-visible for their own retention self-check.
+- **Real pricing tiers.** `checkGate` returns true; a future
+  workspace-scoped entitlement fetch hooks in when there's a backend.
+- **Large-file virtualization.** Nobody's hit the wall yet; deferring.
+
+### Follow-ups from earlier phases
+
+- ESLint module boundaries at empty `components/territory/**` globs
+  still stand. Not touched.
+- Shared-lib pruning still stands; accounts route still imports.
+- P4 empirical done-when (under 10 minutes on real data, unaided) is
+  now the primary user-facing next step.
+
+---
+
+## 2026-07-09 — In-context instructions across /ingest and /recon
+
+User pushback: too much guessing about what's required. This batch adds
+proper self-serve copy so a partner can walk both pages without a
+handhold. No new features, no engine changes.
+
+### What landed
+
+**Glossary (`lib/waferiqGlossary.ts`)**
+
+Central definitions consumed by both pages so wording stays consistent:
+
+- `POS_FIELDS`, `SD_FIELDS`, `PP_FIELDS` — per-field { required, hint }
+  for every entity kind. Hints explain the field in a partner's terms
+  (e.g. "distributor's allowed selling price under the debit
+  authorization. Credit per unit = cost − authorized.").
+- `ENTITY_KIND_HEADLINE` — one-sentence description of what each entity
+  kind is.
+- `STATUS_DEFINITION` — plain-English meaning of matched / flagged /
+  missing_claim / orphan_claim.
+- `FLAG_DEFINITION` — plain-English meaning of each of the six flag
+  kinds.
+
+**Ingest UI copy**
+
+- New page header explains the full workflow (upload → map →
+  reconcile) with a link into `/recon`.
+- Collapsed `<details>` block: "What files should I upload?" describing
+  POS report, S&D claims, PP claims.
+- Review-stage callout above the parsed-column table explaining what
+  the user is doing on that screen (raw dataset review, not the
+  WaferIQ-specific mapping yet).
+- Section header on "Saved datasets" explains what mapping does.
+- `EntityMappingPanel` shows the kind-specific headline at the top and
+  a per-field hint under every dropdown. Required fields marked with
+  a rose `*`. Field labels stay monospace so mapping schemas remain
+  scannable, but the hint text underneath is prose.
+
+**Recon UI copy**
+
+- Expanded page header explains what reconciliation does in one
+  paragraph — the four possible statuses in one sentence each.
+- Two new expandable panels laid out side-by-side after the status
+  distribution bar:
+  - `StatusLegend` — "How to read the results" with the four status
+    tokens colored the same as in the table + their definitions.
+  - `FlagGlossary` — the six flag kinds with definitions.
+- "Showing N of M" line above the results now also hints that rows
+  are clickable for drill-down.
+- Export note clarified: export is scoped to currently-filtered
+  results, not all of them.
+
+### Harness state
+
+- `npx tsc --noEmit` clean.
+- `npm run lint` — 0 errors (fixed a dangling `ClaimType` unused-import
+  after switching EntityMappingPanel to use the glossary). Same 3
+  pre-existing warnings in parked map files.
+- `npm test` — 216/216 across 32 files (unchanged; this batch adds
+  copy, no logic).
+- `npm run build` — succeeds. Route table unchanged.
+
+### What unlocks next
+
+Still the P4/P5 empirical bar (partner-real data + under-10-minutes
+unaided) and the actual partner conversation. Nothing else changes.
+
+---
+
+## 2026-07-09 — Home page at `/`
+
+Previously `/` did `redirect('/ingest')` — no landing surface.
+Replaced with a real state-aware home page.
+
+### Scope calls
+
+1. **State-aware, not marketing.** The user hitting `/` is already on
+   the app; no need to sell them. Instead surface where they are in
+   the flow and where to go next.
+2. **Root stops redirecting.** `app/page.tsx` renders `HomeClient`
+   directly.
+3. **Sample-data loader extracted** to `lib/loadSampleData.ts` so
+   `/` (empty state) and `/ingest` (empty state) both use the same
+   fetch → parse → commit pipeline.
+4. **Home link first in the nav.** Root gets an exact-match active
+   check so it doesn't highlight for every subroute.
+
+### What landed
+
+- `lib/loadSampleData.ts` — shared fetch-and-import for
+  `public/sample/{pos,sd_claims,pp_claims}.csv`. Takes
+  `{ commitDataset, recordDatasetImport }` deps so it works from any
+  Zustand consumer without importing the store directly.
+- `app/HomeApp.tsx` — the Zustand-using landing:
+  - Header with tagline explaining what WaferIQ does in one paragraph.
+  - `StageCTA` computes one of four states from store counts
+    (`empty` / `has_datasets_no_entities` / `has_entities_no_run` /
+    `has_results`) and renders the matching CTA. Empty state offers
+    both "Start with your own file" (→ `/ingest`) and "Load sample
+    data" (in-place).
+  - `SnapshotGrid` — 4 metric cards showing dataset / POS / claim /
+    result counts at a glance.
+  - Collapsed `<details>`: "What is WaferIQ, exactly?" — full
+    domain intro with S&D and PP explained.
+  - `HealthPanel` at the bottom — retention thesis metric visible on
+    landing.
+- `app/HomeClient.tsx` — thin client wrapper doing
+  `dynamic(() => import('./HomeApp'), { ssr: false })`; three-layer
+  pattern matches `/ingest` and `/recon`.
+- `app/page.tsx` — replaced redirect with `<HomeClient />` + metadata.
+- `components/AppNav.tsx` — Home prepended to nav items; special-case
+  exact-match active check for `/` (prefix-match would highlight
+  Home on every route).
+- `app/ingest/IngestApp.tsx` — `loadSample()` shrunk to a one-line
+  call into the shared loader.
+
+### Harness state
+
+- `npx tsc --noEmit` clean.
+- `npm run lint` — 0 errors; same 3 pre-existing exhaustive-deps
+  warnings in parked map files.
+- `npm test` — 216/216 across 32 files (unchanged; this batch is UI +
+  extraction).
+- `npm run build` — succeeds. `/` now in the route table as a static
+  page (was previously the redirect entry).

@@ -10,8 +10,8 @@ import {
   useTeamOrder,
   useActions,
 } from '@/hooks/useTerritoryStore';
-import AddSubregionModal from '@/components/territory/toolbar/AddSubregionModal';
-import EditRegionModal from '@/components/territory/toolbar/EditRegionModal';
+import AddSubregionModal from '@/legacy/components/territory/toolbar/AddSubregionModal';
+import EditRegionModal from '@/legacy/components/territory/toolbar/EditRegionModal';
 import type { Region } from '@/types/territory';
 
 export default function RegionsSidebarPanel() {
