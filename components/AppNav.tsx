@@ -9,6 +9,7 @@ interface NavItem {
 }
 
 const ITEMS: NavItem[] = [
+  { href: '/', label: 'Home' },
   { href: '/ingest', label: 'Ingest' },
   { href: '/recon', label: 'Recon' },
 ];
@@ -24,14 +25,18 @@ export default function AppNav() {
   return (
     <nav className="sticky top-0 z-10 flex items-center gap-4 border-b border-[var(--hairline)] bg-[var(--surface-panel)]/80 px-4 py-2 backdrop-blur">
       <Link
-        href="/ingest"
+        href="/"
         className="mr-2 text-sm font-medium tracking-tight text-[color:var(--ink-strong)]"
       >
         WaferIQ
       </Link>
       <ul className="flex gap-1">
         {ITEMS.map((item) => {
-          const active = pathname === item.href || pathname?.startsWith(item.href + '/');
+          // Root is a special case — must match exactly, not prefix, else
+          // "/" would highlight for every route.
+          const active = item.href === '/'
+            ? pathname === '/'
+            : pathname === item.href || pathname?.startsWith(item.href + '/');
           return (
             <li key={item.href}>
               <Link

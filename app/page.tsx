@@ -1,8 +1,11 @@
-import { redirect } from 'next/navigation';
+import type { Metadata } from 'next';
+import HomeClient from './HomeClient';
 
-// WaferIQ pivot: root lands on the ingestion surface (P1). Was /accounts
-// as a P0 placeholder; now that /ingest is the wedge-agnostic entry
-// point, redirect there. Will move to the P4 results view when it ships.
+export const metadata: Metadata = {
+  title: 'WaferIQ — Reconcile distributor sell-through',
+  description: 'Reconcile POS reports against ship-and-debit and price-protection claims. Missed credits, orphan claims, quantity + price discrepancies, with dollar impact.',
+};
+
 export default function Home() {
-  redirect('/ingest');
+  return <HomeClient />;
 }

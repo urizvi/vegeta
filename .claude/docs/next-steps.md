@@ -65,6 +65,11 @@ funnel deferred as a possible sibling wedge later.
   `ExportButtons` consumer. Onboarding card on `/ingest` with "Load
   sample data" button; three sample CSVs in `public/sample/`. Large-
   file warning (>10 MB) and clearer parse-error UI.
+- [x] **Home page at `/`.** State-aware landing (empty → sample loader,
+  intermediate → next-step CTA, results → dashboard link). Snapshot
+  grid, "What is WaferIQ" details, `HealthPanel`. Nav gets a Home link
+  ahead of Ingest / Recon. Sample-data loader extracted to
+  `lib/loadSampleData.ts` so both `/` and `/ingest` share it.
 
 ## Next
 

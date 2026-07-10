@@ -1,12 +1,13 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { parseArrayBuffer, parseFile, ParseError } from '@/ingestion/parse';
+import { parseFile, ParseError } from '@/ingestion/parse';
 import { initialColumns } from '@/ingestion/columns';
 import { buildDataset } from '@/ingestion/validate';
 import type { Column, Dataset, ParsedSheet } from '@/ingestion/types';
 import { useWaferiqStore } from '@/store/waferiqStore';
 import { getStorageState, subscribeStorageState, type StorageStatus } from '@/store/persistedStorage';
+import { loadSampleData } from '@/lib/loadSampleData';
 import DropZone from '@/components/ingest/DropZone';
 import ColumnMappingTable from '@/components/ingest/ColumnMappingTable';
 import ValidationSummary from '@/components/ingest/ValidationSummary';
@@ -22,12 +23,6 @@ interface Staged {
 }
 
 const LARGE_FILE_BYTES = 10 * 1024 * 1024;
-
-const SAMPLE_FILES: { path: string; name: string }[] = [
-  { path: '/sample/pos.csv', name: 'Sample POS report (June 2026)' },
-  { path: '/sample/sd_claims.csv', name: 'Sample S&D claims (June 2026)' },
-  { path: '/sample/pp_claims.csv', name: 'Sample PP claims (June 2026)' },
-];
 
 export default function IngestClient() {
   const datasets = useWaferiqStore((s) => s.datasets);
@@ -116,28 +111,7 @@ export default function IngestClient() {
   }
 
   async function loadSample() {
-    for (const f of SAMPLE_FILES) {
-      const res = await fetch(f.path);
-      if (!res.ok) throw new Error(`Failed to fetch ${f.path} (${res.status}).`);
-      const buf = await res.arrayBuffer();
-      const sheet = parseArrayBuffer(buf, f.path);
-      const columns = initialColumns(sheet);
-      const built = buildDataset(sheet, columns);
-      const dataset: Dataset = {
-        id: `ds_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
-        name: f.name,
-        source: {
-          fileName: f.path.split('/').pop() ?? f.path,
-          fileSize: buf.byteLength,
-          importedAt: new Date().toISOString(),
-        },
-        columns,
-        rows: built.rows,
-        issues: built.issues,
-      };
-      commitDataset(dataset);
-      recordDatasetImport();
-    }
+    await loadSampleData({ commitDataset, recordDatasetImport });
   }
 
   return (

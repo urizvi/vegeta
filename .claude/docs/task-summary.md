@@ -3047,3 +3047,62 @@ Central definitions consumed by both pages so wording stays consistent:
 
 Still the P4/P5 empirical bar (partner-real data + under-10-minutes
 unaided) and the actual partner conversation. Nothing else changes.
+
+---
+
+## 2026-07-09 — Home page at `/`
+
+Previously `/` did `redirect('/ingest')` — no landing surface.
+Replaced with a real state-aware home page.
+
+### Scope calls
+
+1. **State-aware, not marketing.** The user hitting `/` is already on
+   the app; no need to sell them. Instead surface where they are in
+   the flow and where to go next.
+2. **Root stops redirecting.** `app/page.tsx` renders `HomeClient`
+   directly.
+3. **Sample-data loader extracted** to `lib/loadSampleData.ts` so
+   `/` (empty state) and `/ingest` (empty state) both use the same
+   fetch → parse → commit pipeline.
+4. **Home link first in the nav.** Root gets an exact-match active
+   check so it doesn't highlight for every subroute.
+
+### What landed
+
+- `lib/loadSampleData.ts` — shared fetch-and-import for
+  `public/sample/{pos,sd_claims,pp_claims}.csv`. Takes
+  `{ commitDataset, recordDatasetImport }` deps so it works from any
+  Zustand consumer without importing the store directly.
+- `app/HomeApp.tsx` — the Zustand-using landing:
+  - Header with tagline explaining what WaferIQ does in one paragraph.
+  - `StageCTA` computes one of four states from store counts
+    (`empty` / `has_datasets_no_entities` / `has_entities_no_run` /
+    `has_results`) and renders the matching CTA. Empty state offers
+    both "Start with your own file" (→ `/ingest`) and "Load sample
+    data" (in-place).
+  - `SnapshotGrid` — 4 metric cards showing dataset / POS / claim /
+    result counts at a glance.
+  - Collapsed `<details>`: "What is WaferIQ, exactly?" — full
+    domain intro with S&D and PP explained.
+  - `HealthPanel` at the bottom — retention thesis metric visible on
+    landing.
+- `app/HomeClient.tsx` — thin client wrapper doing
+  `dynamic(() => import('./HomeApp'), { ssr: false })`; three-layer
+  pattern matches `/ingest` and `/recon`.
+- `app/page.tsx` — replaced redirect with `<HomeClient />` + metadata.
+- `components/AppNav.tsx` — Home prepended to nav items; special-case
+  exact-match active check for `/` (prefix-match would highlight
+  Home on every route).
+- `app/ingest/IngestApp.tsx` — `loadSample()` shrunk to a one-line
+  call into the shared loader.
+
+### Harness state
+
+- `npx tsc --noEmit` clean.
+- `npm run lint` — 0 errors; same 3 pre-existing exhaustive-deps
+  warnings in parked map files.
+- `npm test` — 216/216 across 32 files (unchanged; this batch is UI +
+  extraction).
+- `npm run build` — succeeds. `/` now in the route table as a static
+  page (was previously the redirect entry).
