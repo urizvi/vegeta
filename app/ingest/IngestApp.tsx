@@ -142,11 +142,45 @@ export default function IngestClient() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-8 p-8">
-      <header>
+      <header className="space-y-2">
         <h1 className="text-2xl font-medium text-[color:var(--ink-strong)]">Data ingestion</h1>
-        <p className="mt-1 text-sm text-[color:var(--ink-muted)]">
-          Drop a CSV or XLSX. Review the inferred columns, fix anything that&apos;s wrong, save.
+        <p className="text-sm text-[color:var(--ink-body)]">
+          Upload your raw distributor files here — a POS report plus your
+          ship-and-debit and price-protection claims. For each file, WaferIQ
+          parses it, lets you review the inferred columns, and turns it into a
+          saved dataset. Once saved, you map that dataset to a WaferIQ entity
+          (POS records, S&amp;D claims, or PP claims), and then head to{' '}
+          <a href="/recon" className="text-[color:var(--brand)] underline">
+            /recon
+          </a>{' '}
+          to run reconciliation.
         </p>
+        <details className="text-xs text-[color:var(--ink-muted)]">
+          <summary className="cursor-pointer select-none hover:text-[color:var(--ink-body)]">
+            What files should I upload?
+          </summary>
+          <ul className="mt-2 list-disc space-y-1 pl-5">
+            <li>
+              <strong>POS / sell-through report</strong> — one row per unit the
+              distributor sold to an end customer, with distributor name, part
+              number, customer, ship date, quantity, and resale price.
+            </li>
+            <li>
+              <strong>Ship-and-debit (S&amp;D) claims</strong> — credits the
+              distributor is asking for, tied to a POS transaction, with a
+              cost price and an authorized price.
+            </li>
+            <li>
+              <strong>Price-protection (PP) claims</strong> — credits on stock
+              held when the manufacturer cut a price, with an original and
+              new price and an effective date.
+            </li>
+          </ul>
+          <p className="mt-2">
+            No claims file yet? You can still upload POS records and see the
+            &ldquo;missing claim&rdquo; picture on <code>/recon</code>.
+          </p>
+        </details>
       </header>
 
       {storageStatus !== 'ok' && (
@@ -178,6 +212,17 @@ export default function IngestClient() {
 
       {staged && preview && (
         <section className="space-y-4">
+          <div className="rounded-lg border border-[var(--hairline)] bg-[var(--surface-panel)] p-4 text-sm text-[color:var(--ink-body)]">
+            <p className="font-medium text-[color:var(--ink-strong)]">Review the parsed file</p>
+            <p className="mt-1 text-xs text-[color:var(--ink-muted)]">
+              WaferIQ inferred a type for each column from the sample values.
+              Rename columns if the source headers are cryptic, override the
+              type if the guess is wrong, mark required columns, or discard
+              anything you don&apos;t need. This is still a &ldquo;raw&rdquo;
+              dataset — the WaferIQ-specific mapping (POS records vs claims)
+              comes on the next screen.
+            </p>
+          </div>
           <div className="flex flex-wrap items-center gap-3">
             <label className="text-sm font-medium text-[color:var(--ink-strong)]">
               Name
@@ -223,9 +268,15 @@ export default function IngestClient() {
       <ReconRunner />
 
       <section>
-        <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-[color:var(--ink-muted)]">
+        <h2 className="text-sm font-medium uppercase tracking-wide text-[color:var(--ink-muted)]">
           Saved datasets
         </h2>
+        <p className="mb-3 mt-1 text-xs text-[color:var(--ink-muted)]">
+          Each saved dataset is a parsed file that WaferIQ has read but not yet
+          categorized. Expand a dataset and click &ldquo;Map to POS-recon&rdquo;
+          to tell WaferIQ what kind of entity these rows represent and which
+          columns go where.
+        </p>
         <DatasetList datasets={datasets} onDelete={deleteDataset} />
       </section>
     </div>

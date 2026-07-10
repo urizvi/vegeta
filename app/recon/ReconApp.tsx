@@ -16,6 +16,8 @@ import StatusBar from '@/components/recon/StatusBar';
 import FiltersBar from '@/components/recon/FiltersBar';
 import ResultsTable from '@/components/recon/ResultsTable';
 import ExportButtons from '@/components/recon/ExportButtons';
+import StatusLegend from '@/components/recon/StatusLegend';
+import FlagGlossary from '@/components/recon/FlagGlossary';
 import HealthPanel from '@/components/HealthPanel';
 
 export default function ReconApp() {
@@ -49,26 +51,37 @@ export default function ReconApp() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-8">
-      <header className="flex flex-wrap items-baseline justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-medium text-[color:var(--ink-strong)]">Reconciliation</h1>
-          <p className="mt-1 text-sm text-[color:var(--ink-muted)]">
-            {posRecords.length} POS record{posRecords.length === 1 ? '' : 's'} · {claims.length} claim{claims.length === 1 ? '' : 's'} loaded.
-          </p>
+      <header className="space-y-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-medium text-[color:var(--ink-strong)]">Reconciliation</h1>
+            <p className="mt-1 text-sm text-[color:var(--ink-muted)]">
+              {posRecords.length} POS record{posRecords.length === 1 ? '' : 's'} · {claims.length} claim{claims.length === 1 ? '' : 's'} loaded.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={run}
+              disabled={!readyToRun}
+              className={`rounded px-3 py-1.5 text-sm font-medium text-white ${
+                readyToRun ? 'bg-[var(--brand)] hover:bg-[var(--brand-hover)]' : 'bg-[color:var(--ink-faint)] cursor-not-allowed'
+              }`}
+            >
+              {noRunYet ? 'Run reconciliation' : 'Re-run reconciliation'}
+            </button>
+            <ExportButtons results={filtered} posById={posById} claimsById={claimsById} />
+          </div>
         </div>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={run}
-            disabled={!readyToRun}
-            className={`rounded px-3 py-1.5 text-sm font-medium text-white ${
-              readyToRun ? 'bg-[var(--brand)] hover:bg-[var(--brand-hover)]' : 'bg-[color:var(--ink-faint)] cursor-not-allowed'
-            }`}
-          >
-            {noRunYet ? 'Run reconciliation' : 'Re-run reconciliation'}
-          </button>
-          <ExportButtons results={filtered} posById={posById} claimsById={claimsById} />
-        </div>
+        <p className="text-sm text-[color:var(--ink-body)]">
+          Reconciliation walks every POS row and tries to match it to one or
+          more claims (ship-and-debit or price-protection). Rows without a
+          claim show up as <strong>missing</strong>; claims without a POS row
+          show up as <strong>orphan</strong>; matches with issues (quantity,
+          price, date, duplicates) get <strong>flagged</strong>. Everything
+          else lands as <strong>matched</strong>. The export includes only
+          what&apos;s currently visible after filtering.
+        </p>
       </header>
 
       {!readyToRun && noRunYet ? (
@@ -81,10 +94,14 @@ export default function ReconApp() {
         <>
           <SummaryHeader summary={summary} lastReconAt={lastReconAt} />
           <StatusBar summary={summary} />
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+            <StatusLegend />
+            <FlagGlossary />
+          </div>
           <FiltersBar filters={filters} onChange={setFilters} />
           <div>
             <div className="mb-2 text-xs uppercase tracking-wide text-[color:var(--ink-muted)]">
-              Showing {filtered.length} of {reconResults.length}
+              Showing {filtered.length} of {reconResults.length} · click a row to drill down
             </div>
             <ResultsTable results={filtered} posById={posById} claimsById={claimsById} />
           </div>

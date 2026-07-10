@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from 'react';
 import type { Column, Dataset } from '@/ingestion/types';
-import type { ClaimType } from '@/domain/pos-recon/entities';
 import {
   mapPOSRecords,
   mapShipAndDebitClaims,
@@ -18,8 +17,7 @@ import {
   suggestPriceProtectionMapping,
 } from '@/domain/pos-recon/suggest';
 import { useWaferiqStore } from '@/store/waferiqStore';
-
-type EntityKind = 'pos_records' | ClaimType;
+import { ENTITY_KIND_HEADLINE, fieldsFor, type EntityKind } from '@/lib/waferiqGlossary';
 
 interface Props {
   dataset: Dataset;
@@ -30,22 +28,6 @@ const KIND_LABELS: Record<EntityKind, string> = {
   ship_and_debit: 'Ship-and-debit claims',
   price_protection: 'Price-protection claims',
 };
-
-const POS_FIELDS: readonly string[] = [
-  'distributor', 'period', 'partNumber', 'endCustomer',
-  'shipDate', 'sellDate', 'quantity', 'resalePrice', 'extendedAmount',
-  'currency', 'externalId',
-];
-const SD_FIELDS: readonly string[] = [
-  'distributor', 'period', 'partNumber', 'endCustomer', 'quantity',
-  'costPrice', 'authorizedPrice', 'authorizationRef', 'currency', 'externalId',
-];
-const PP_FIELDS: readonly string[] = [
-  'distributor', 'period', 'partNumber', 'endCustomer', 'quantity',
-  'originalPrice', 'newPrice', 'effectiveDate', 'currency', 'externalId',
-];
-
-const OPTIONAL_FIELDS = new Set(['currency', 'externalId', 'authorizationRef']);
 
 interface RunOutcome {
   count: number;
@@ -71,6 +53,13 @@ export default function EntityMappingPanel({ dataset }: Props) {
           </select>
         </label>
       </div>
+      <p className="mb-4 text-xs text-[color:var(--ink-muted)]">
+        {ENTITY_KIND_HEADLINE[kind]}{' '}
+        Pick the column from this dataset that corresponds to each field below.
+        Required fields are marked with <span className="text-rose-600">*</span>.
+        The suggestions are seeded from a synonym heuristic — double-check them
+        before running.
+      </p>
       {/* Remount on kind change so the per-kind mapping suggestion seeds
           state cleanly without a setState-in-effect dance. */}
       <MappingForm key={kind} dataset={dataset} kind={kind} />
@@ -93,7 +82,8 @@ function MappingForm({ dataset, kind }: { dataset: Dataset; kind: EntityKind }) 
   const replacePOSRecordsForDataset = useWaferiqStore((s) => s.replacePOSRecordsForDataset);
   const replaceClaimsForDataset = useWaferiqStore((s) => s.replaceClaimsForDataset);
 
-  const fields = kind === 'pos_records' ? POS_FIELDS : kind === 'ship_and_debit' ? SD_FIELDS : PP_FIELDS;
+  const glossary = fieldsFor(kind);
+  const fields = Object.keys(glossary);
 
   function run() {
     if (kind === 'pos_records') {
@@ -126,12 +116,13 @@ function MappingForm({ dataset, kind }: { dataset: Dataset; kind: EntityKind }) 
         </button>
       </div>
 
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {fields.map((f) => (
           <FieldSelect
             key={f}
             field={f}
-            required={!OPTIONAL_FIELDS.has(f)}
+            required={glossary[f]?.required ?? false}
+            hint={glossary[f]?.hint ?? ''}
             value={mapping[f] ?? ''}
             columns={activeColumns}
             onChange={(v) => setMapping({ ...mapping, [f]: v })}
@@ -145,18 +136,20 @@ function MappingForm({ dataset, kind }: { dataset: Dataset; kind: EntityKind }) 
 }
 
 function FieldSelect({
-  field, required, value, columns, onChange,
+  field, required, hint, value, columns, onChange,
 }: {
   field: string;
   required: boolean;
+  hint: string;
   value: string;
   columns: Column[];
   onChange: (v: string) => void;
 }) {
   return (
-    <label className="text-xs text-[color:var(--ink-muted)]">
-      <span className="mb-1 block font-mono">
-        {field}{required ? ' *' : ''}
+    <label className="block text-xs text-[color:var(--ink-muted)]">
+      <span className="mb-1 flex items-baseline gap-1">
+        <span className="font-mono text-[color:var(--ink-body)]">{field}</span>
+        {required && <span className="text-rose-600" aria-label="required">*</span>}
       </span>
       <select
         className="w-full rounded border border-[var(--hairline)] bg-white px-2 py-1 text-sm text-[color:var(--ink-body)]"
@@ -168,6 +161,7 @@ function FieldSelect({
           <option key={c.key} value={c.key}>{c.label} ({c.type})</option>
         ))}
       </select>
+      {hint && <p className="mt-1 leading-snug text-[color:var(--ink-muted)]">{hint}</p>}
     </label>
   );
 }

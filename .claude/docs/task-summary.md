@@ -2978,3 +2978,72 @@ tracked in next-steps.md.
 - Shared-lib pruning still stands; accounts route still imports.
 - P4 empirical done-when (under 10 minutes on real data, unaided) is
   now the primary user-facing next step.
+
+---
+
+## 2026-07-09 — In-context instructions across /ingest and /recon
+
+User pushback: too much guessing about what's required. This batch adds
+proper self-serve copy so a partner can walk both pages without a
+handhold. No new features, no engine changes.
+
+### What landed
+
+**Glossary (`lib/waferiqGlossary.ts`)**
+
+Central definitions consumed by both pages so wording stays consistent:
+
+- `POS_FIELDS`, `SD_FIELDS`, `PP_FIELDS` — per-field { required, hint }
+  for every entity kind. Hints explain the field in a partner's terms
+  (e.g. "distributor's allowed selling price under the debit
+  authorization. Credit per unit = cost − authorized.").
+- `ENTITY_KIND_HEADLINE` — one-sentence description of what each entity
+  kind is.
+- `STATUS_DEFINITION` — plain-English meaning of matched / flagged /
+  missing_claim / orphan_claim.
+- `FLAG_DEFINITION` — plain-English meaning of each of the six flag
+  kinds.
+
+**Ingest UI copy**
+
+- New page header explains the full workflow (upload → map →
+  reconcile) with a link into `/recon`.
+- Collapsed `<details>` block: "What files should I upload?" describing
+  POS report, S&D claims, PP claims.
+- Review-stage callout above the parsed-column table explaining what
+  the user is doing on that screen (raw dataset review, not the
+  WaferIQ-specific mapping yet).
+- Section header on "Saved datasets" explains what mapping does.
+- `EntityMappingPanel` shows the kind-specific headline at the top and
+  a per-field hint under every dropdown. Required fields marked with
+  a rose `*`. Field labels stay monospace so mapping schemas remain
+  scannable, but the hint text underneath is prose.
+
+**Recon UI copy**
+
+- Expanded page header explains what reconciliation does in one
+  paragraph — the four possible statuses in one sentence each.
+- Two new expandable panels laid out side-by-side after the status
+  distribution bar:
+  - `StatusLegend` — "How to read the results" with the four status
+    tokens colored the same as in the table + their definitions.
+  - `FlagGlossary` — the six flag kinds with definitions.
+- "Showing N of M" line above the results now also hints that rows
+  are clickable for drill-down.
+- Export note clarified: export is scoped to currently-filtered
+  results, not all of them.
+
+### Harness state
+
+- `npx tsc --noEmit` clean.
+- `npm run lint` — 0 errors (fixed a dangling `ClaimType` unused-import
+  after switching EntityMappingPanel to use the glossary). Same 3
+  pre-existing warnings in parked map files.
+- `npm test` — 216/216 across 32 files (unchanged; this batch adds
+  copy, no logic).
+- `npm run build` — succeeds. Route table unchanged.
+
+### What unlocks next
+
+Still the P4/P5 empirical bar (partner-real data + under-10-minutes
+unaided) and the actual partner conversation. Nothing else changes.
