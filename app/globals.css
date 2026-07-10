@@ -23,6 +23,11 @@
   --hairline:        rgba(15, 23, 42, 0.07);
   --hairline-strong: rgba(15, 23, 42, 0.12);
 
+  /* interactive fields — inputs, selects, secondary buttons.
+     Stronger than hairline so form controls read as tangible. */
+  --field-border:    #64748b;          /* slate-500 */
+  --field-border-hover: #334155;       /* slate-700 */
+
   /* brand */
   --brand:           #4f46e5;          /* indigo-600 */
   --brand-hover:     #4338ca;          /* indigo-700 */

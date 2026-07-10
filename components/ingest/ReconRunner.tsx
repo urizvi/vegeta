@@ -33,7 +33,7 @@ export default function ReconRunner() {
           className={`ml-auto rounded px-3 py-1.5 text-sm font-medium ${
             readyToRun
               ? 'bg-[var(--brand)] text-white hover:bg-[var(--brand-hover)]'
-              : 'border border-[var(--hairline-strong)] text-[color:var(--ink-body)] hover:bg-[var(--surface-sunken)]'
+              : 'border border-[var(--field-border)] text-[color:var(--ink-strong)] hover:bg-[var(--surface-sunken)]'
           }`}
         >
           {reconResults.length > 0 ? 'Open dashboard' : readyToRun ? 'Reconcile' : 'View recon'}

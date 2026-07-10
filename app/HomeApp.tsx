@@ -164,7 +164,7 @@ function StageCTA({
             type="button"
             onClick={onSample}
             disabled={busy}
-            className={`rounded border border-[var(--hairline-strong)] bg-white px-3 py-1.5 text-sm text-[color:var(--ink-body)] hover:bg-[var(--surface-sunken)] ${busy ? 'cursor-wait opacity-60' : ''}`}
+            className={`rounded border border-[var(--field-border)] bg-white px-3 py-1.5 text-sm text-[color:var(--ink-strong)] hover:bg-[var(--surface-sunken)] ${busy ? 'cursor-wait opacity-60' : ''}`}
           >
             {busy ? 'Loading…' : 'Load sample data'}
           </button>
@@ -238,7 +238,7 @@ function StageCTA({
         </Link>
         <Link
           href="/ingest"
-          className="rounded border border-[var(--hairline-strong)] bg-white px-3 py-1.5 text-sm text-[color:var(--ink-body)] hover:bg-[var(--surface-sunken)]"
+          className="rounded border border-[var(--field-border)] bg-white px-3 py-1.5 text-sm text-[color:var(--ink-strong)] hover:bg-[var(--surface-sunken)]"
         >
           Import more data
         </Link>

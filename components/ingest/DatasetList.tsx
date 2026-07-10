@@ -66,7 +66,7 @@ export default function DatasetList({ datasets, onDelete }: Props) {
               <div className="flex gap-2 text-xs">
                 <button
                   type="button"
-                  className="rounded border border-[var(--hairline-strong)] px-2 py-1 text-[color:var(--ink-body)] hover:bg-[var(--surface-sunken)]"
+                  className="rounded border border-[var(--field-border)] px-2 py-1 text-[color:var(--ink-strong)] hover:bg-[var(--surface-sunken)]"
                   onClick={() => setExpanded(isOpen ? null : d.id)}
                   aria-expanded={isOpen}
                 >

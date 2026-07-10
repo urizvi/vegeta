@@ -58,7 +58,7 @@ function ExportButton({
   reason?: string;
 }) {
   const disabled = empty || !allowed;
-  const base = 'rounded border border-[var(--hairline-strong)] bg-white px-3 py-1.5 text-sm text-[color:var(--ink-body)] hover:bg-[var(--surface-sunken)]';
+  const base = 'rounded border border-[var(--field-border)] bg-white px-3 py-1.5 text-sm text-[color:var(--ink-strong)] hover:bg-[var(--surface-sunken)]';
   const off = 'cursor-not-allowed opacity-50';
   return (
     <button

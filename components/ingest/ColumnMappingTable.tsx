@@ -43,7 +43,7 @@ export default function ColumnMappingTable({ sheet, columns, onChange }: Props) 
                 </td>
                 <td className="p-3">
                   <input
-                    className="w-32 rounded border border-[var(--hairline-strong)] bg-white px-2 py-1 font-mono text-xs"
+                    className="w-32 rounded border border-[var(--field-border)] bg-white px-2 py-1 font-mono text-xs"
                     value={col.key}
                     onChange={(e) => onChange(col.key, { key: e.target.value })}
                     disabled={col.discarded}
@@ -51,7 +51,7 @@ export default function ColumnMappingTable({ sheet, columns, onChange }: Props) 
                 </td>
                 <td className="p-3">
                   <input
-                    className="w-40 rounded border border-[var(--hairline-strong)] bg-white px-2 py-1"
+                    className="w-40 rounded border border-[var(--field-border)] bg-white px-2 py-1"
                     value={col.label}
                     onChange={(e) => onChange(col.key, { label: e.target.value })}
                     disabled={col.discarded}
@@ -59,7 +59,7 @@ export default function ColumnMappingTable({ sheet, columns, onChange }: Props) 
                 </td>
                 <td className="p-3">
                   <select
-                    className="rounded border border-[var(--hairline-strong)] bg-white px-2 py-1"
+                    className="rounded border border-[var(--field-border)] bg-white px-2 py-1"
                     value={col.type}
                     onChange={(e) => onChange(col.key, { type: e.target.value as ColumnType })}
                     disabled={col.discarded}

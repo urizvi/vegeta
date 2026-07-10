@@ -201,7 +201,7 @@ export default function IngestClient() {
             <label className="text-sm font-medium text-[color:var(--ink-strong)]">
               Name
               <input
-                className="ml-2 w-64 rounded border border-[var(--hairline-strong)] bg-white px-2 py-1"
+                className="ml-2 w-64 rounded border border-[var(--field-border)] bg-white px-2 py-1"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
               />

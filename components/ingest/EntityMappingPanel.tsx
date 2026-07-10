@@ -43,7 +43,7 @@ export default function EntityMappingPanel({ dataset }: Props) {
         <label className="text-[color:var(--ink-strong)]">
           Import as
           <select
-            className="ml-2 rounded border border-[var(--hairline-strong)] bg-white px-2 py-1"
+            className="ml-2 rounded border border-[var(--field-border)] bg-white px-2 py-1"
             value={kind}
             onChange={(e) => setKind(e.target.value as EntityKind)}
           >
@@ -152,7 +152,7 @@ function FieldSelect({
         {required && <span className="text-rose-600" aria-label="required">*</span>}
       </span>
       <select
-        className="w-full rounded border border-[var(--hairline)] bg-white px-2 py-1 text-sm text-[color:var(--ink-body)]"
+        className="w-full rounded border border-[var(--field-border)] bg-white px-2 py-1 text-sm text-[color:var(--ink-strong)]"
         value={value}
         onChange={(e) => onChange(e.target.value)}
       >

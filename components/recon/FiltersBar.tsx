@@ -40,7 +40,7 @@ export default function FiltersBar({ filters, onChange }: Props) {
           placeholder="Search part, customer, or distributor…"
           value={filters.search}
           onChange={(e) => onChange({ ...filters, search: e.target.value })}
-          className="w-72 max-w-full rounded border border-[var(--hairline-strong)] bg-white px-2 py-1"
+          className="w-72 max-w-full rounded border border-[var(--field-border)] bg-white px-2 py-1"
         />
         {anyActive && (
           <button
@@ -95,7 +95,7 @@ function Chip({ label, active, onClick }: { label: string; active: boolean; onCl
       className={`rounded-full border px-2.5 py-0.5 text-xs ${
         active
           ? 'border-[var(--brand)] bg-[var(--brand-soft)] text-[color:var(--brand-ink)]'
-          : 'border-[var(--hairline-strong)] bg-white text-[color:var(--ink-body)] hover:bg-[var(--surface-sunken)]'
+          : 'border-[var(--field-border)] bg-white text-[color:var(--ink-strong)] hover:bg-[var(--surface-sunken)]'
       }`}
     >
       {label}
